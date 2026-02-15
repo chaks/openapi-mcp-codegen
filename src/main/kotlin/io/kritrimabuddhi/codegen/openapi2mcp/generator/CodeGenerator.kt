@@ -45,9 +45,6 @@ class CodeGenerator {
     // Generate MCP tool layer
     toolGenerator.generate(options, parsedApi.paths, parsedApi.info)
 
-    // Generate build configuration files
-    generateBuildConfig(options, parsedApi)
-
     // Generate application configuration
     generateApplicationConfig(options, parsedApi)
   }
@@ -65,80 +62,6 @@ class CodeGenerator {
         dir.createDirectories()
       }
     }
-  }
-
-  private fun generateBuildConfig(options: CliOptions, parsedApi: ParsedOpenApi) {
-    val buildGradleContent = generateBuildGradleContent(options, parsedApi)
-    val buildPath = options.output.resolve("build.gradle.kts")
-    buildPath.writeText(buildGradleContent)
-  }
-
-  private fun generateBuildGradleContent(options: CliOptions, parsedApi: ParsedOpenApi): String {
-    val packageName = options.rootPackage
-    val clientName = options.clientName
-
-    return """
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
-plugins {
-    kotlin("jvm") version "1.9.22"
-    id("io.quarkus") version "3.8.1"
-}
-
-group = "$packageName"
-version = "1.0.0-SNAPSHOT"
-
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    // Quarkus dependencies
-    implementation("io.quarkus:quarkus-rest-client")
-    implementation("io.quarkus:quarkus-rest-client-jackson")
-    implementation("io.quarkus:quarkus-langchain4j")
-
-    // Kotlin
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-
-    // Testing
-    testImplementation("io.quarkus:quarkus-junit5")
-    testImplementation("io.rest-assured:rest-assured")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
-tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xjsr305=strict",
-            "-opt-in=kotlin.RequiresOptIn"
-        )
-    }
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
-    systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
-}
-
-// Create selective JAR containing only domain and client packages
-tasks.register<Jar>("domainClientJar") {
-    archiveClassifier.set("domain-client")
-    from(sourceSets.main.get().output) {
-        include("**/domain/**", "**/client/**")
-        exclude("**/tool/**")
-    }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-        """.trimIndent()
   }
 
   private fun generateApplicationConfig(options: CliOptions, parsedApi: ParsedOpenApi) {

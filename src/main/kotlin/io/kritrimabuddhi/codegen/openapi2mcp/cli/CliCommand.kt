@@ -9,6 +9,7 @@ import picocli.CommandLine.Command
 import picocli.CommandLine.Option
 import java.nio.file.Files
 import java.nio.file.Paths
+import kotlin.system.exitProcess
 
 /**
  * Main CLI command for the OpenAPI to MCP generator.
@@ -80,12 +81,12 @@ class CliCommand : Runnable {
       if (!Files.exists(input)) {
         System.err.println("Error: Input file does not exist: $input")
         CommandLine(this).usage(System.err)
-        System.exit(1)
+        exitProcess(1)
       }
 
       if (!Files.isRegularFile(input)) {
         System.err.println("Error: Input path is not a file: $input")
-        System.exit(1)
+        exitProcess(1)
       }
 
       // Create output directory if needed
@@ -130,7 +131,7 @@ class CliCommand : Runnable {
         System.err.println()
         e.printStackTrace(System.err)
       }
-      System.exit(1)
+      exitProcess(1)
     }
   }
 }
