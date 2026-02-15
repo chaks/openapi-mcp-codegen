@@ -1,0 +1,219 @@
+# OpenAPI MCP Codegen
+
+A CLI tool that parses OpenAPI 3.0/3.1 YAML specifications and generates a structured Quarkus-based SDK with MCP (Model Context Protocol) Toolset integration.
+
+## Overview
+
+This tool automates the generation of:
+- **Domain Layer**: Data classes with Jackson/JSON-B annotations
+- **Client Layer**: REST client interfaces using MicroProfile Rest Client
+- **MCP Tool Layer**: LangChain4j `@Tool` annotated wrappers for AI/LLM integration
+
+## Features
+
+- Parses OpenAPI 3.0 and 3.1 specifications
+- Generates type-safe Kotlin code using KotlinPoet
+- Creates Quarkus-ready REST clients
+- Generates LangChain4j MCP tools for AI agent integration
+- Selective JAR packaging (domain+client only, excludes tools)
+
+## Requirements
+
+- JDK 17+
+- Gradle 8+
+
+## Building the Generator
+
+```bash
+./gradlew build
+```
+
+## Usage
+
+### Basic Usage
+
+```bash
+./gradlew run --args="-i <input.yaml> -o <output-dir> -r <root-package>"
+```
+
+### Example
+
+Generate code for the Petstore API:
+
+```bash
+./gradlew run --args="--input examples/petstore.yaml --output ./generated --root-package io.swagger.petstore"
+```
+
+### CLI Options
+
+| Option | Short | Description | Required |
+|--------|-------|-------------|----------|
+| `--input` | `-i` | Path to the OpenAPI YAML file | Yes |
+| `--output` | `-o` | Output directory for generated code | No (default: ./generated) |
+| `--root-package` | `-r` | Root package name (e.g., io.swagger.petstore) | Yes |
+| `--verbose` | `-v` | Enable verbose output | No |
+
+### With Verbose Output
+
+```bash
+./gradlew run --args="-i examples/petstore.yaml -o ./generated -r io.swagger.petstore -v"
+```
+
+## Generated Structure
+
+For a root package of `io.swagger.petstore`, the generator creates:
+
+```
+generated/
+├── build.gradle.kts              # Gradle build configuration
+├── src/main/kotlin/
+│   └── io/swagger/petstore/
+│       ├── domain/               # Data classes
+│       │   ├── Pet.kt
+│       │   ├── Category.kt
+│       │   └── Order.kt
+│       ├── client/               # REST client interface
+│       │   └── PetstoreClient.kt
+│       └── tool/                 # MCP tool wrappers
+│           └── PetstoreTools.kt
+└── src/main/resources/
+    └── application.properties     # Quarkus configuration
+```
+
+## Building the Generated Code
+
+```bash
+cd generated
+./gradlew build
+```
+
+### Building Selective JAR (Domain + Client only)
+
+```bash
+./gradlew domainClientJar
+```
+
+This creates a JAR file containing only the `domain` and `client` packages, excluding the `tool` package.
+
+## OpenAPI Specification Support
+
+### Supported Features
+
+- Schema definitions (`components/schemas`)
+- Path definitions with HTTP methods (GET, POST, PUT, DELETE, PATCH)
+- Parameters (path, query, header, cookie)
+- Request bodies
+- Responses with schema references
+- Arrays and nested objects
+- Enum values
+- Required/optional fields
+
+### Type Mapping
+
+| OpenAPI Type | Format | Kotlin Type |
+|--------------|--------|-------------|
+| string | - | `String` |
+| string | date-time | `String` |
+| string | uuid | `String` |
+| integer | int32 | `Int` |
+| integer | int64 | `Long` |
+| number | float | `Float` |
+| number | double | `Double` |
+| boolean | - | `Boolean` |
+| array | - | `List<T>` |
+| object | - | Data class |
+
+## Example Generated Code
+
+### Domain Class (Pet.kt)
+
+```kotlin
+package io.swagger.petstore.domain
+
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.annotation.JsonPropertyOrder
+import jakarta.json.bind.annotation.JsonbProperty
+
+/**
+ * A pet for sale in the pet store
+ */
+@kotlinx.serialization.Serializable
+data class Pet(
+    @JsonProperty("id")
+    @JsonbProperty("id")
+    val id: Long? = null,
+
+    @JsonProperty("name")
+    @JsonbProperty("name")
+    val name: String,
+
+    @JsonProperty("category")
+    @JsonbProperty("category")
+    val category: Category? = null,
+
+    @JsonProperty("status")
+    @JsonbProperty("status")
+    val status: String? = null
+)
+```
+
+### REST Client Interface (PetstoreClient.kt)
+
+```kotlin
+package io.swagger.petstore.client
+
+import jakarta.ws.rs.GET
+import jakarta.ws.rs.Path
+import jakarta.ws.rs.QueryParam
+import org.eclipse.microprofile.rest.client.annotation.RegisterRestClient
+
+@RegisterRestClient(configKey = "petstore-api")
+interface PetstoreClient {
+
+    @GET("/pet/findByStatus")
+    fun findPetsByStatus(
+        @QueryParam("status") status: List<String>
+    ): List<Pet>
+}
+```
+
+### MCP Tool Wrapper (PetstoreTools.kt)
+
+```kotlin
+package io.swagger.petstore.tool
+
+import dev.langchain4j.agent.tool.Tool
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.inject.Produces
+import org.eclipse.microprofile.rest.client.inject.RestClient
+
+@ApplicationScoped
+class PetstoreTools {
+
+    @RestClient
+    lateinit var client: PetstoreClient
+
+    @Tool("Finds Pets by status")
+    fun findPetsByStatus(status: List<String>): List<Pet> {
+        return client.findPetsByStatus(status)
+    }
+}
+```
+
+## Architecture
+
+```
+CLI (Main.kt)
+  └─> CliCommand.parse()
+      └─> OpenApiParser.parse(inputFile)
+          └─> CodeGenerator.generate(parsedModel)
+              ├─> DomainGenerator.generate() → domain classes
+              ├─> ClientGenerator.generate() → REST client interfaces
+              ├─> ToolGenerator.generate() → MCP tool wrappers
+              └─> Generate Gradle build file
+```
+
+## License
+
+This project is provided as-is for educational and commercial use.
