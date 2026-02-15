@@ -87,9 +87,6 @@ ${configKey}/scope=${options.rootPackage}
 quarkus.application.name=${title}
 quarkus.http.port=8080
 quarkus.log.level=INFO
-
-# LangChain4j configuration
-quarkus.langchain4j.enabled=true
         """.trimIndent()
   }
 

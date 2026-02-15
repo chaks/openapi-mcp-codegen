@@ -16,12 +16,12 @@ import kotlin.system.exitProcess
  *
  * Usage:
  * ```
- * ./gradlew run --args="-i openapi.yaml -o ./generated -r com.example.weather"
+ * ./gradlew run --args="-i openapi.yaml -o ./generated -r com.petstore"
  * ```
  *
  * Or with long options:
  * ```
- * ./gradlew run --args="--input openapi.yaml --output ./generated --root-package com.example.weather"
+ * ./gradlew run --args="--input openapi.yaml --output ./generated --root-package com.petstore"
  * ```
  */
 @TopCommand
@@ -61,7 +61,7 @@ class CliCommand : Runnable {
 
   @Option(
     names = ["-r", "--root-package"],
-    description = ["Root package name for generated code (e.g., com.example.weather)"],
+    description = ["Root package name for generated code (e.g., com.petstore)"],
     required = true
   )
   private lateinit var rootPackage: String

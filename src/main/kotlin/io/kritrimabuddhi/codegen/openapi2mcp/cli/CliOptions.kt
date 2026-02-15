@@ -8,7 +8,7 @@ import java.nio.file.Path
  *
  * @property input The path to the input OpenAPI YAML specification file
  * @property output The directory where generated code will be written
- * @property rootPackage The root package name for generated code (e.g., com.example.weather)
+ * @property rootPackage The root package name for generated code (e.g., com.petstore)
  */
 data class CliOptions(
   @JsonProperty("input")
@@ -25,7 +25,7 @@ data class CliOptions(
       "Root package name cannot be blank"
     }
     require(rootPackage.matches(Regex("^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"))) {
-      "Root package must be a valid package name (e.g., com.example.weather)"
+      "Root package must be a valid package name (e.g., com.petstore)"
     }
   }
 
@@ -49,7 +49,7 @@ data class CliOptions(
 
   /**
    * Returns the client interface name derived from the root package.
-   * Example: com.example.weather -> WeatherClient
+   * Example: com.petstore -> PetstoreClient
    */
   val clientName: String
     get() {
@@ -60,7 +60,7 @@ data class CliOptions(
 
   /**
    * Returns the tool class name derived from the root package.
-   * Example: com.example.weather -> WeatherTools
+   * Example: com.petstore -> PetstoreTools
    */
   val toolName: String
     get() {
@@ -71,7 +71,7 @@ data class CliOptions(
 
   /**
    * Returns the config key for the REST client.
-   * Example: com.example.weather -> weather-api
+   * Example: com.petstore -> petstore-api
    */
   val configKey: String
     get() {

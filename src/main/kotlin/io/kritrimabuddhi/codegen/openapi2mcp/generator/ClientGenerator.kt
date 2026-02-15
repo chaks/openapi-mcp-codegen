@@ -1,13 +1,13 @@
 package io.kritrimabuddhi.codegen.openapi2mcp.generator
 
+import com.squareup.kotlinpoet.*
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliOptions
 import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.ApiInfo
 import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.ParameterInfo
 import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.PathModel
 import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.RequestBodyInfo
 import io.kritrimabuddhi.codegen.openapi2mcp.util.TypeMapper
-import com.squareup.kotlinpoet.*
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import java.nio.file.Path

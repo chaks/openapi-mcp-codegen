@@ -1,11 +1,11 @@
 package io.kritrimabuddhi.codegen.openapi2mcp.generator
 
+import com.squareup.kotlinpoet.*
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliOptions
 import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.ApiInfo
 import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.PathModel
 import io.kritrimabuddhi.codegen.openapi2mcp.util.TypeMapper
-import com.squareup.kotlinpoet.*
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import java.nio.file.Path
@@ -15,8 +15,8 @@ import kotlin.io.path.writeText
 /**
  * Generates MCP tool wrapper classes from OpenAPI path definitions.
  *
- * Uses KotlinPoet to generate classes with LangChain4j @Tool annotations
- * that wrap REST client calls for use in AI/LLM applications.
+ * Uses KotlinPoet to generate classes with Quarkus LangChain @Tool and @ToolArg annotations
+ * that wrap REST client calls for use in MCP (Model Context Protocol).
  */
 @ApplicationScoped
 class ToolGenerator {
@@ -102,7 +102,8 @@ class ToolGenerator {
       .addType(classBuilder.build())
       .addImport("jakarta.enterprise.context", "ApplicationScoped")
       .addImport("org.eclipse.microprofile.rest.client.inject", "RestClient")
-      .addImport("dev.langchain4j.agent.tool", "Tool")
+      .addImport("io.quarkiverse.mcp.server", "Tool")
+      .addImport("io.quarkiverse.mcp.server", "ToolArg")
       .indent("    ")
       .build()
   }
@@ -119,8 +120,8 @@ class ToolGenerator {
     // Add @Tool annotation with description
     val toolDescription = buildToolDescription(path)
     funBuilder.addAnnotation(
-      AnnotationSpec.builder(ClassName("dev.langchain4j.agent.tool", "Tool"))
-        .addMember("%S", toolDescription)
+      AnnotationSpec.builder(ClassName("io.quarkiverse.mcp.server", "Tool"))
+        .addMember("description = %S", toolDescription)
         .build()
     )
 
@@ -134,8 +135,15 @@ class ToolGenerator {
 
       val paramBuilder = ParameterSpec.builder(paramName, paramType)
 
-      // Add parameter description
-      val paramDescription = param.description ?: "Parameter: ${param.name}"
+      // Add @ToolArg annotation
+      val paramDescription = if (param.description.isNullOrBlank()) paramName else param.description
+      paramBuilder.addAnnotation(
+        AnnotationSpec.builder(ClassName("io.quarkiverse.mcp.server", "ToolArg"))
+          .addMember("description = %S", paramDescription)
+          .build()
+      )
+
+      // Add parameter description to KDoc
       paramBuilder.addKdoc(paramDescription)
 
       funBuilder.addParameter(paramBuilder.build())
@@ -145,11 +153,15 @@ class ToolGenerator {
     path.requestBody?.let { requestBody ->
       val bodyType = determineRequestBodyType(requestBody, domainPackage)
       val bodyParam = ParameterSpec.builder("body", bodyType)
-      if (requestBody.description != null) {
-        bodyParam.addKdoc(requestBody.description)
-      } else {
-        bodyParam.addKdoc("Request body")
-      }
+      val bodyDescription = if (requestBody.description.isNullOrBlank()) "Request body" else requestBody.description
+
+      bodyParam.addAnnotation(
+        AnnotationSpec.builder(ClassName("io.quarkiverse.mcp.server", "ToolArg"))
+          .addMember("description = %S", bodyDescription)
+          .build()
+      )
+
+      bodyParam.addKdoc(bodyDescription)
       funBuilder.addParameter(bodyParam.build())
     }
 
