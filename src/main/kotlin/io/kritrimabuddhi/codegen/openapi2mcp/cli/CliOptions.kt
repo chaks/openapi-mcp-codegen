@@ -79,4 +79,14 @@ data class CliOptions(
       val simpleName = parts.lastOrNull()?.takeIf { it.isNotBlank() } ?: "api"
       return "${simpleName.lowercase()}-api"
     }
+
+  /**
+   * Returns the project name derived from the root package.
+   * Example: com.petstore -> petstore
+   */
+  val projectName: String
+    get() {
+      val parts = rootPackage.split(".")
+      return parts.lastOrNull()?.takeIf { it.isNotBlank() }?.lowercase() ?: "generated-sdk"
+    }
 }

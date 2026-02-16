@@ -72,6 +72,12 @@ class CliCommand : Runnable {
   )
   private var verbose: Boolean = false
 
+  @Option(
+    names = ["-c", "--compile"],
+    description = ["Compile the generated code after generation"]
+  )
+  private var compile: Boolean = false
+
   override fun run() {
     try {
       val input = Paths.get(inputPath).toAbsolutePath().normalize()
@@ -124,6 +130,24 @@ class CliCommand : Runnable {
       println("  - ${options.domainPackage.replace('.', '/')}  (domain layer)")
       println("  - ${options.clientPackage.replace('.', '/')}  (client layer)")
       println("  - ${options.toolPackage.replace('.', '/')}   (tool layer)")
+      println()
+
+      // Compile generated code if requested
+      if (compile) {
+        try {
+          generator.compile(options.output, verbose)
+          println()
+          println("Compilation complete!")
+          println("  JAR location: ${options.output.resolve("build/libs")}")
+        } catch (e: Exception) {
+          println()
+          System.err.println("Warning: Compilation failed: ${e.message}")
+          if (verbose) {
+            e.printStackTrace(System.err)
+          }
+          // Continue execution - don't fail the whole process
+        }
+      }
 
     } catch (e: Exception) {
       System.err.println("Error: ${e.message}")

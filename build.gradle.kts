@@ -1,8 +1,9 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "2.1.0"
-    id("io.quarkus") version "3.15.3"
+    kotlin("jvm") version "2.2.21"
+    kotlin("plugin.allopen") version "2.2.21"
+    id("io.quarkus") version "3.31.3"
     application
 }
 
@@ -13,11 +14,19 @@ repositories {
     mavenCentral()
 }
 
+val quarkusPlatformGroupId: String by project
+val quarkusPlatformArtifactId: String by project
+val quarkusPlatformVersion: String by project
+
 dependencies {
-    implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.15.3"))
+    implementation(enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"))
 
     // Quarkus dependencies
     implementation("io.quarkus:quarkus-picocli")
+
+    implementation("io.quarkus:quarkus-rest")
+    implementation("io.quarkus:quarkus-rest-jackson")
+    implementation("io.quarkus:quarkus-rest-client-jackson")
 
     // OpenAPI Parser
     implementation("io.swagger.parser.v3:swagger-parser:2.1.20")
@@ -50,12 +59,10 @@ application {
 }
 
 tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xjsr305=strict",
-            "-opt-in=kotlin.RequiresOptIn"
-        )
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        // Note: freeCompilerArgs now uses a Property/ListProperty approach
+        freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
 

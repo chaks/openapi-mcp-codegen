@@ -26,6 +26,9 @@ class CodeGenerator {
   @Inject
   private lateinit var toolGenerator: ToolGenerator
 
+  @Inject
+  private lateinit var buildConfigGenerator: BuildConfigGenerator
+
   /**
    * Generate all code artifacts from the parsed OpenAPI specification.
    *
@@ -35,6 +38,9 @@ class CodeGenerator {
   fun generate(parsedApi: ParsedOpenApi, options: CliOptions) {
     // Create main output directory structure
     createDirectoryStructure(options.output)
+
+    // Generate Gradle build configuration
+    buildConfigGenerator.generate(options)
 
     // Generate domain layer
     domainGenerator.generate(options, parsedApi.schemas)
@@ -47,6 +53,51 @@ class CodeGenerator {
 
     // Generate application configuration
     generateApplicationConfig(options, parsedApi)
+  }
+
+  /**
+   * Compile the generated code using Gradle.
+   *
+   * @param outputDir The output directory containing the generated project
+   * @param verbose Whether to show verbose output
+   */
+  fun compile(outputDir: Path, verbose: Boolean) {
+    val command = if (System.getProperty("os.name").lowercase().contains("windows")) {
+      listOf("cmd", "/c", "gradlew.bat", "build")
+    } else {
+      listOf("./gradlew", "build")
+    }
+
+    if (verbose) {
+      println("Compiling generated code...")
+      println("  Command: ${command.joinToString(" ")}")
+    }
+
+    val processBuilder = ProcessBuilder(command)
+    processBuilder.directory(outputDir.toFile())
+
+    if (verbose) {
+      processBuilder.redirectErrorStream(true)
+    } else {
+      processBuilder.redirectError(ProcessBuilder.Redirect.PIPE)
+    }
+
+    val process = processBuilder.start()
+
+    // Read output
+    val output = process.inputStream.bufferedReader().readText()
+    val error = process.errorStream.bufferedReader().readText()
+
+    val exitCode = process.waitFor()
+
+    if (verbose) {
+      println(output)
+    }
+
+    if (exitCode != 0) {
+      val errorMessage = error.ifEmpty { output }
+      throw RuntimeException("Compilation failed with exit code $exitCode. Output: $errorMessage")
+    }
   }
 
   private fun createDirectoryStructure(outputDir: Path) {
@@ -74,6 +125,7 @@ class CodeGenerator {
     val configKey = options.configKey
     val baseUrl = extractBaseUrl(parsedApi)
     val title = parsedApi.info.title.lowercase().replace(" ", "-")
+    val toolPackagePattern = options.toolPackage.replace('.', '/')
 
     return """
 # Quarkus application configuration for ${parsedApi.info.title}
@@ -87,6 +139,9 @@ ${configKey}/scope=${options.rootPackage}
 quarkus.application.name=${title}
 quarkus.http.port=8080
 quarkus.log.level=INFO
+
+# Exclude tool package from build (only domain and client are compiled)
+quarkus.package.exclude=${toolPackagePattern}/**
         """.trimIndent()
   }
 

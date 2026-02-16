@@ -7,14 +7,16 @@ A CLI tool that parses OpenAPI 3.0/3.1 YAML specifications and generates a struc
 This tool automates the generation of:
 - **Domain Layer**: Data classes with Jackson/JSON-B annotations
 - **Client Layer**: REST client interfaces using MicroProfile Rest Client
-- **MCP Tool Layer**: LangChain4j `@Tool` annotated wrappers for AI/LLM integration
+- **MCP Tool Layer**: Quarkus MCP server `@Tool` and `@ToolArg` annotated wrappers for AI/LLM integration
 
 ## Features
 
 - Parses OpenAPI 3.0 and 3.1 specifications
 - Generates type-safe Kotlin code using KotlinPoet
 - Creates Quarkus-ready REST clients
-- Generates LangChain4j MCP tools for AI agent integration
+- Generates MCP tools with `@Tool` and `@ToolArg` annotations for AI agent integration
+- Includes Gradle wrapper and build configuration in generated output
+- Optional auto-compilation of generated code
 - Selective JAR packaging (domain+client only, excludes tools)
 
 ## Requirements
@@ -33,7 +35,7 @@ This tool automates the generation of:
 ### Basic Usage
 
 ```bash
-./gradlew run --args="-i <input.yaml> -o <output-dir> -r <root-package>"
+java -jar -i <input.yaml> -o <output-dir> -r <root-package>
 ```
 
 ### Example
@@ -41,23 +43,32 @@ This tool automates the generation of:
 Generate code for the Petstore API:
 
 ```bash
-./gradlew run --args="--input examples/petstore.yaml --output ./generated --root-package io.swagger.petstore"
+java -jar --input examples/petstore.yaml --output ./generated --root-package io.swagger.petstore
 ```
 
 ### CLI Options
 
-| Option | Short | Description | Required |
-|--------|-------|-------------|----------|
-| `--input` | `-i` | Path to the OpenAPI YAML file | Yes |
-| `--output` | `-o` | Output directory for generated code | No (default: ./generated) |
-| `--root-package` | `-r` | Root package name (e.g., io.swagger.petstore) | Yes |
-| `--verbose` | `-v` | Enable verbose output | No |
+| Option           | Short | Description                                   | Required                  |
+|------------------|-------|-----------------------------------------------|---------------------------|
+| `--input`        | `-i`  | Path to the OpenAPI YAML file                 | Yes                       |
+| `--output`       | `-o`  | Output directory for generated code           | No (default: ./generated) |
+| `--root-package` | `-r`  | Root package name (e.g., io.swagger.petstore) | Yes                       |
+| `--verbose`      | `-v`  | Enable verbose output                         | No                        |
+| `--compile`      | `-c`  | Compile the generated code after generation   | No                        |
 
 ### With Verbose Output
 
 ```bash
-./gradlew run --args="-i examples/petstore.yaml -o ./generated -r io.swagger.petstore -v"
+java -jar -i examples/petstore.yaml -o ./generated -r io.swagger.petstore -v
 ```
+
+### With Auto-Compilation
+
+```bash
+java -jar -i examples/petstore.yaml -o ./generated -r io.swagger.petstore -c
+```
+
+Compiles the generated code after generation using the Gradle wrapper that is included in the output directory.
 
 ## Generated Structure
 
@@ -66,6 +77,13 @@ For a root package of `io.swagger.petstore`, the generator creates:
 ```
 generated/
 ├── build.gradle.kts              # Gradle build configuration
+├── settings.gradle.kts           # Gradle settings file
+├── gradlew                       # Gradle wrapper script (Unix)
+├── gradlew.bat                   # Gradle wrapper script (Windows)
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar    # Gradle wrapper JAR
+│       └── gradle-wrapper.properties
 ├── src/main/kotlin/
 │   └── io/swagger/petstore/
 │       ├── domain/               # Data classes
@@ -110,18 +128,18 @@ This creates a JAR file containing only the `domain` and `client` packages, excl
 
 ### Type Mapping
 
-| OpenAPI Type | Format | Kotlin Type |
-|--------------|--------|-------------|
-| string | - | `String` |
-| string | date-time | `String` |
-| string | uuid | `String` |
-| integer | int32 | `Int` |
-| integer | int64 | `Long` |
-| number | float | `Float` |
-| number | double | `Double` |
-| boolean | - | `Boolean` |
-| array | - | `List<T>` |
-| object | - | Data class |
+| OpenAPI Type | Format    | Kotlin Type |
+|--------------|-----------|-------------|
+| string       | -         | `String`    |
+| string       | date-time | `String`    |
+| string       | uuid      | `String`    |
+| integer      | int32     | `Int`       |
+| integer      | int64     | `Long`      |
+| number       | float     | `Float`     |
+| number       | double    | `Double`    |
+| boolean      | -         | `Boolean`   |
+| array        | -         | `List<T>`   |
+| object       | -         | Data class  |
 
 ## Example Generated Code
 
@@ -183,9 +201,9 @@ interface PetstoreClient {
 ```kotlin
 package io.swagger.petstore.tool
 
-import dev.langchain4j.agent.tool.Tool
+import io.quarkiverse.mcp.server.Tool
+import io.quarkiverse.mcp.server.ToolArg
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.enterprise.inject.Produces
 import org.eclipse.microprofile.rest.client.inject.RestClient
 
 @ApplicationScoped
@@ -194,8 +212,11 @@ class PetstoreTools {
     @RestClient
     lateinit var client: PetstoreClient
 
-    @Tool("Finds Pets by status")
-    fun findPetsByStatus(status: List<String>): List<Pet> {
+    @Tool("GET /pet/findByStatus - Finds Pets by status")
+    fun findPetsByStatus(
+        @ToolArg("The status values to filter by")
+        status: List<String>
+    ): List<Pet> {
         return client.findPetsByStatus(status)
     }
 }
