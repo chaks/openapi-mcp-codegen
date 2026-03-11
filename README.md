@@ -26,16 +26,28 @@ This tool automates the generation of:
 
 ## Building the Generator
 
+### For Development (Fast Build)
+
 ```bash
 ./gradlew build
 ```
+
+This creates the executable JAR at `build/quarkus-app/quarkus-run.jar` (requires the `lib/` directory alongside).
+
+### For Distribution (Single Binary)
+
+```bash
+./gradlew clean quarkusBuild -Dquarkus.package.type=uber-jar
+```
+
+This creates a single, distributable JAR with all dependencies bundled at `build/openapi-mcp-codegen-1.0.0-SNAPSHOT-runner.jar` (~33MB). Use this for distribution.
 
 ## Usage
 
 ### Basic Usage
 
 ```bash
-java -jar -i <input.yaml> -o <output-dir> -r <root-package>
+java -jar build/quarkus-app/quarkus-run.jar -i <input.yaml> -o <output-dir> -r <root-package>
 ```
 
 ### Example
@@ -43,7 +55,7 @@ java -jar -i <input.yaml> -o <output-dir> -r <root-package>
 Generate code for the Petstore API:
 
 ```bash
-java -jar --input examples/petstore.yaml --output ./generated --root-package io.swagger.petstore
+java -jar build/quarkus-app/quarkus-run.jar --input examples/petstore.yaml --output ./generated --root-package io.swagger.petstore
 ```
 
 ### CLI Options
@@ -59,13 +71,13 @@ java -jar --input examples/petstore.yaml --output ./generated --root-package io.
 ### With Verbose Output
 
 ```bash
-java -jar -i examples/petstore.yaml -o ./generated -r io.swagger.petstore -v
+java -jar build/quarkus-app/quarkus-run.jar -i examples/petstore.yaml -o ./generated -r io.swagger.petstore -v
 ```
 
 ### With Auto-Compilation
 
 ```bash
-java -jar -i examples/petstore.yaml -o ./generated -r io.swagger.petstore -c
+java -jar build/quarkus-app/quarkus-run.jar -i examples/petstore.yaml -o ./generated -r io.swagger.petstore -c
 ```
 
 Compiles the generated code after generation using the Gradle wrapper that is included in the output directory.
@@ -235,6 +247,3 @@ CLI (Main.kt)
               └─> Generate Gradle build file
 ```
 
-## License
-
-This project is provided as-is for educational and commercial use.

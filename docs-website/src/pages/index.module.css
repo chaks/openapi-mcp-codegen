@@ -1,0 +1,75 @@
+/**
+ * CSS files with the .module.css suffix will be treated as CSS modules
+ * and scoped locally.
+ */
+
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.logo {
+  max-width: 200px;
+  height: auto;
+  display: block;
+  mix-blend-mode: multiply;
+  opacity: 0.95;
+}
+
+/* Apply blend mode only for dark hero background */
+.hero--primary .logo {
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.features {
+  padding: 4rem 0;
+}
+
+.features h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.installation {
+  padding: 4rem 0;
+  background: var(--ifm-color-emphasis-100);
+}
+
+.installation h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.codeBlock {
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-border-color);
+  border-radius: var(--ifm-code-border-radius);
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+
+.codeBlock code {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.9rem;
+  color: var(--ifm-code-color);
+  line-height: 1.6;
+}
