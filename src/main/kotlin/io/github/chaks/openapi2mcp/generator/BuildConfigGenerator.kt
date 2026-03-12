@@ -1,6 +1,6 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.generator
+package io.github.chaks.openapi2mcp.generator
 
-import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliOptions
+import io.github.chaks.openapi2mcp.cli.CliOptions
 import jakarta.enterprise.context.ApplicationScoped
 import java.nio.file.Files
 import java.nio.file.Path

@@ -1,6 +1,6 @@
-package io.kritrimabuddhi.codegen.openapi2mcp
+package io.github.chaks.openapi2mcp
 
-import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliCommand
+import io.github.chaks.openapi2mcp.cli.CliCommand
 import io.quarkus.runtime.Quarkus
 import io.quarkus.runtime.QuarkusApplication
 import io.quarkus.runtime.annotations.QuarkusMain

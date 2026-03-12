@@ -1,7 +1,7 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.cli
+package io.github.chaks.openapi2mcp.cli
 
-import io.kritrimabuddhi.codegen.openapi2mcp.generator.CodeGenerator
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.OpenApiParser
+import io.github.chaks.openapi2mcp.generator.CodeGenerator
+import io.github.chaks.openapi2mcp.parser.OpenApiParser
 import io.quarkus.picocli.runtime.annotations.TopCommand
 import jakarta.inject.Inject
 import picocli.CommandLine

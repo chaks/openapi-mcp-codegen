@@ -1,7 +1,7 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.generator
+package io.github.chaks.openapi2mcp.generator
 
-import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliOptions
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.ParsedOpenApi
+import io.github.chaks.openapi2mcp.cli.CliOptions
+import io.github.chaks.openapi2mcp.parser.model.ParsedOpenApi
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import java.nio.file.Path

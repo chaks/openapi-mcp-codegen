@@ -1,10 +1,10 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.generator
+package io.github.chaks.openapi2mcp.generator
 
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliOptions
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.SchemaModel
-import io.kritrimabuddhi.codegen.openapi2mcp.util.TypeMapper
+import io.github.chaks.openapi2mcp.cli.CliOptions
+import io.github.chaks.openapi2mcp.parser.model.SchemaModel
+import io.github.chaks.openapi2mcp.util.TypeMapper
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import java.nio.file.Path
@@ -121,7 +121,7 @@ class DomainGenerator {
   }
 
   private fun determinePropertyType(
-    propInfo: io.kritrimabuddhi.codegen.openapi2mcp.parser.model.PropertyInfo,
+    propInfo: io.github.chaks.openapi2mcp.parser.model.PropertyInfo,
     domainPackage: String
   ): com.squareup.kotlinpoet.TypeName {
     return when {

@@ -1,4 +1,4 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.util
+package io.github.chaks.openapi2mcp.util
 
 import jakarta.enterprise.context.ApplicationScoped
 

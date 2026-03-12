@@ -7,7 +7,7 @@ plugins {
     application
 }
 
-group = "io.kritrimabuddhi.codegen.openapi2mcp"
+group = "io.github.chaks.openapi2mcp"
 version = "1.0.0-SNAPSHOT"
 
 repositories {
@@ -55,7 +55,7 @@ java {
 }
 
 application {
-    mainClass.set("io.kritrimabuddhi.codegen.openapi2mcp.Main")
+    mainClass.set("io.github.chaks.openapi2mcp.Main")
 }
 
 tasks.withType<KotlinCompile> {

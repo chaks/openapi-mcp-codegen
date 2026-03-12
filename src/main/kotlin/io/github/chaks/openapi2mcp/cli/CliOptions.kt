@@ -1,4 +1,4 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.cli
+package io.github.chaks.openapi2mcp.cli
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import java.nio.file.Path

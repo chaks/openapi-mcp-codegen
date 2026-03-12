@@ -1,11 +1,11 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.generator
+package io.github.chaks.openapi2mcp.generator
 
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import io.kritrimabuddhi.codegen.openapi2mcp.cli.CliOptions
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.ApiInfo
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.PathModel
-import io.kritrimabuddhi.codegen.openapi2mcp.util.TypeMapper
+import io.github.chaks.openapi2mcp.cli.CliOptions
+import io.github.chaks.openapi2mcp.parser.model.ApiInfo
+import io.github.chaks.openapi2mcp.parser.model.PathModel
+import io.github.chaks.openapi2mcp.util.TypeMapper
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import java.nio.file.Path
@@ -215,7 +215,7 @@ class ToolGenerator {
   }
 
   private fun determineParameterType(
-    param: io.kritrimabuddhi.codegen.openapi2mcp.parser.model.ParameterInfo,
+    param: io.github.chaks.openapi2mcp.parser.model.ParameterInfo,
     domainPackage: String
   ): com.squareup.kotlinpoet.TypeName {
     return when {
@@ -257,7 +257,7 @@ class ToolGenerator {
   }
 
   private fun determineRequestBodyType(
-    requestBody: io.kritrimabuddhi.codegen.openapi2mcp.parser.model.RequestBodyInfo,
+    requestBody: io.github.chaks.openapi2mcp.parser.model.RequestBodyInfo,
     domainPackage: String
   ): com.squareup.kotlinpoet.TypeName {
     return when {

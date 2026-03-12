@@ -1,6 +1,6 @@
-package io.kritrimabuddhi.codegen.openapi2mcp
+package io.github.chaks.openapi2mcp
 
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.OpenApiParser
+import io.github.chaks.openapi2mcp.parser.OpenApiParser
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths

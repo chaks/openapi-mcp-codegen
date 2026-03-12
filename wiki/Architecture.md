@@ -53,7 +53,7 @@ Deep dive into the architecture and design of OpenAPI MCP Codegen.
 
 ### 1. CLI Interface
 
-**Location**: `src/main/kotlin/io/kritrimabuddhi/codegen/openapi2mcp/`
+**Location**: `src/main/kotlin/io/github/chaks/codegen/openapi2mcp/`
 
 **Components**:
 - `Main.kt`: Quarkus application entry point
@@ -67,7 +67,7 @@ Deep dive into the architecture and design of OpenAPI MCP Codegen.
 
 ### 2. OpenAPI Parser
 
-**Location**: `src/main/kotlin/io/kritrimabuddhi/codegen/openapi2mcp/parser/`
+**Location**: `src/main/kotlin/io/github/chaks/codegen/openapi2mcp/parser/`
 
 **Components**:
 - `OpenApiParser.kt`: Main parsing logic
@@ -100,7 +100,7 @@ data class SchemaModel(
 
 ### 3. Code Generator
 
-**Location**: `src/main/kotlin/io/kritrimabuddhi/codegen/openapi2mcp/generator/`
+**Location**: `src/main/kotlin/io/github/chaks/codegen/openapi2mcp/generator/`
 
 **Components**:
 - `CodeGenerator.kt`: Main orchestrator
@@ -116,7 +116,7 @@ data class SchemaModel(
 
 ### 4. Utilities
 
-**Location**: `src/main/kotlin/io/kritrimabuddhi/codegen/openapi2mcp/util/`
+**Location**: `src/main/kotlin/io/github/chaks/codegen/openapi2mcp/util/`
 
 **Components**:
 - `TypeMapper.kt`: OpenAPI to Kotlin type conversion

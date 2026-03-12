@@ -46,7 +46,7 @@ cd openapi-mcp-codegen
 openapi-mcp-codegen/
 ├── src/
 │   ├── main/
-│   │   ├── kotlin/io/kritrimabuddhi/codegen/openapi2mcp/
+│   │   ├── kotlin/io/github/chaks/codegen/openapi2mcp/
 │   │   │   ├── Main.kt                 # Application entry point
 │   │   │   ├── cli/
 │   │   │   │   ├── CliCommand.kt       # CLI command handler
@@ -64,7 +64,7 @@ openapi-mcp-codegen/
 │   │   │       └── StringExtensions.kt # String extensions
 │   │   └── resources/
 │   └── test/
-│       └── kotlin/io/kritrimabuddhi/codegen/openapi2mcp/
+│       └── kotlin/io/github/chaks/codegen/openapi2mcp/
 │           └── ...                     # Test files
 ├── examples/
 │   └── petstore.yaml                   # Sample OpenAPI spec
@@ -329,7 +329,7 @@ Add to `src/main/resources/application.properties`:
 
 ```properties
 quarkus.log.level=DEBUG
-quarkus.log.category."io.kritrimabuddhi".level=DEBUG
+quarkus.log.category."io.github.chaks".level=DEBUG
 ```
 
 ### Run in Debug Mode

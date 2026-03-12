@@ -1,6 +1,6 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.parser
+package io.github.chaks.openapi2mcp.parser
 
-import io.kritrimabuddhi.codegen.openapi2mcp.parser.model.*
+import io.github.chaks.openapi2mcp.parser.model.*
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.media.ArraySchema

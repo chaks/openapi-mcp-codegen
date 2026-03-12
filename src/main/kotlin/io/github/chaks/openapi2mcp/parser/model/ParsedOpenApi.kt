@@ -1,4 +1,4 @@
-package io.kritrimabuddhi.codegen.openapi2mcp.parser.model
+package io.github.chaks.openapi2mcp.parser.model
 
 /**
  * Internal representation of a parsed OpenAPI specification.

@@ -107,7 +107,7 @@ generated/
 │       └── tool/                 # MCP tool wrappers
 │           └── PetstoreTools.kt
 └── src/main/resources/
-    └── application.properties     # Quarkus configuration
+    └── application.properties    # Quarkus configuration
 ```
 
 ## Building the Generated Code
