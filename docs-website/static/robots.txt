@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chaks.github.io/openapi-mcp-codegen/sitemap.xml
