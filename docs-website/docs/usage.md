@@ -17,13 +17,13 @@ java -jar openapi-mcp-codegen.jar \
 
 ## CLI Options
 
-| Option           | Short | Description                                   | Required                  |
-|------------------|-------|-----------------------------------------------|---------------------------|
-| `--input`        | `-i`  | Path to the OpenAPI YAML file                 | Yes                       |
-| `--output`       | `-o`  | Output directory for generated code           | No (default: `./generated`)|
-| `--root-package` | `-r`  | Root package name (e.g., `io.swagger.petstore`) | Yes                   |
-| `--verbose`      | `-v`  | Enable verbose output                         | No                        |
-| `--compile`      | `-c`  | Compile the generated code after generation   | No                        |
+| Option           | Short | Description                                     | Required                    |
+|------------------|-------|-------------------------------------------------|-----------------------------|
+| `--input`        | `-i`  | Path to the OpenAPI YAML file                   | Yes                         |
+| `--output`       | `-o`  | Output directory for generated code             | No (default: `./generated`) |
+| `--root-package` | `-r`  | Root package name (e.g., `io.swagger.petstore`) | Yes                         |
+| `--verbose`      | `-v`  | Enable verbose output                           | No                          |
+| `--compile`      | `-c`  | Compile the generated code after generation     | No                          |
 
 ## Examples
 

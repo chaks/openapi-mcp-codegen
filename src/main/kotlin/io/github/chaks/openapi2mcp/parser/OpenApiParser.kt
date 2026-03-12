@@ -240,7 +240,7 @@ class OpenApiParser {
 
       ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-        ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
     } else {
       val hasRef = schema?.`$ref` != null
 
@@ -253,7 +253,7 @@ class OpenApiParser {
 
       ref = schema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-        ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
     }
 
     val arrayItemType =
@@ -304,7 +304,7 @@ class OpenApiParser {
 
       ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-        ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
     } else {
       val hasRef = schema?.`$ref` != null
 
@@ -317,7 +317,7 @@ class OpenApiParser {
 
       ref = schema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-        ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
     }
 
     val arrayItemType =
