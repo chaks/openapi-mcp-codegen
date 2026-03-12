@@ -50,7 +50,8 @@ class ToolGenerator {
     )
 
     val outputPath = toolPath.resolve("${options.toolName}.kt")
-    outputPath.writeText(fileSpec.toString())
+    // Remove explicit 'public' modifiers (redundant in Kotlin)
+    outputPath.writeText(fileSpec.toString().replace("public ", ""))
   }
 
   private fun getToolPath(outputDir: Path, toolPackage: String): Path {

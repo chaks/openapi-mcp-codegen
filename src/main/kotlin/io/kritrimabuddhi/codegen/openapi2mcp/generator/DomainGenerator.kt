@@ -40,7 +40,8 @@ class DomainGenerator {
     schemas.forEach { (name, schema) ->
       val fileSpec = generateDomainClass(domainPackage, schema)
       val outputPath = domainPath.resolve("${schema.name}.kt")
-      outputPath.writeText(fileSpec.toString())
+      // Remove explicit 'public' modifiers (redundant in Kotlin)
+      outputPath.writeText(fileSpec.toString().replace("public ", ""))
     }
 
     // Generate nested schemas first (dependencies)
@@ -199,7 +200,8 @@ class DomainGenerator {
         val domainPath = getDomainPath(options.output, domainPackage)
         val fileSpec = generateDomainClass(domainPackage, schema)
         val outputPath = domainPath.resolve("${schema.name}.kt")
-        outputPath.writeText(fileSpec.toString())
+        // Remove explicit 'public' modifiers (redundant in Kotlin)
+        outputPath.writeText(fileSpec.toString().replace("public ", ""))
       }
     }
   }

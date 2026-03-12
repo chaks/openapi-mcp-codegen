@@ -25,3 +25,5 @@ generated/
 .quarkus/
 
 /bin/
+
+/progress.md

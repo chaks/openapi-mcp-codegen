@@ -51,7 +51,8 @@ class ClientGenerator {
     )
 
     val outputPath = clientPath.resolve("${options.clientName}.kt")
-    outputPath.writeText(fileSpec.toString())
+    // Remove explicit 'public' modifiers (redundant in Kotlin)
+    outputPath.writeText(fileSpec.toString().replace("public ", ""))
   }
 
   private fun getClientPath(outputDir: Path, clientPackage: String): Path {

@@ -57,8 +57,8 @@ class OpenApiParser {
       description = info.description
     )
 
-    val schemas = extractSchemas(openAPI)
-    val paths = extractPaths(openAPI)
+    val schemas = extractSchemas(openAPI).toMutableMap()
+    val paths = extractPaths(openAPI, schemas)
 
     return ParsedOpenApi(
       openapiVersion = openAPI.openapi ?: "3.0.0",
@@ -129,27 +129,32 @@ class OpenApiParser {
     )
   }
 
-  private fun extractPaths(openAPI: OpenAPI): List<PathModel> {
+  private fun extractPaths(openAPI: OpenAPI, schemas: MutableMap<String, SchemaModel>): List<PathModel> {
     val paths = mutableListOf<PathModel>()
 
     openAPI.paths?.forEach { (path, pathItem) ->
       pathItem.readOperationsMap().forEach { (method, operation) ->
-        paths.add(extractPathModel(path, method.name, operation))
+        paths.add(extractPathModel(path, method.name, operation, schemas))
       }
     }
 
     return paths
   }
 
-  private fun extractPathModel(path: String, method: String, operation: Operation): PathModel {
+  private fun extractPathModel(
+    path: String,
+    method: String,
+    operation: Operation,
+    schemas: MutableMap<String, SchemaModel>
+  ): PathModel {
     val parameters = (operation.parameters ?: emptyList()).map { param ->
       extractParameterInfo(param)
     }
 
-    val requestBody = operation.requestBody?.let { extractRequestBodyInfo(it) }
+    val requestBody = operation.requestBody?.let { extractRequestBodyInfo(it, method, path, schemas) }
 
     val responses = operation.responses?.mapValues { (statusCode, response) ->
-      extractResponseInfo(statusCode, response)
+      extractResponseInfo(statusCode, response, method, path, schemas)
     } ?: emptyMap()
 
     return PathModel(
@@ -201,7 +206,12 @@ class OpenApiParser {
     )
   }
 
-  private fun extractRequestBodyInfo(requestBody: RequestBody): RequestBodyInfo {
+  private fun extractRequestBodyInfo(
+    requestBody: RequestBody,
+    method: String,
+    path: String,
+    schemas: MutableMap<String, SchemaModel>
+  ): RequestBodyInfo {
     val content = requestBody.content
     val mediaType = content?.get("application/json")
       ?: content?.get("application/x-www-form-urlencoded")
@@ -212,16 +222,38 @@ class OpenApiParser {
 
     val isArray =
       schema != null && (schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true)
-    val ref = if (isArray && schema != null) {
+
+    // Handle inline object schemas
+    var ref: String? = null
+    var inlineSchemaRef: String? = null
+
+    if (isArray && schema != null) {
       val itemsSchema = schema.items
-      itemsSchema?.`$ref`?.let { extractSimpleRef(it) } ?: itemsSchema?.let {
-        findRefForSchema(
-          it,
-          currentOpenAPI
-        )
+      val hasItemsRef = itemsSchema?.`$ref` != null
+
+      // Check if array items are inline object schemas
+      if (itemsSchema != null && !hasItemsRef && itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true) {
+        val schemaName = generateInlineSchemaName(method, path, "Item")
+        schemas[schemaName] = extractSchemaModel(schemaName, itemsSchema)
+        inlineSchemaRef = schemaName
       }
+
+      ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
+        ?: inlineSchemaRef
+        ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
     } else {
-      schema?.`$ref`?.let { extractSimpleRef(it) } ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
+      val hasRef = schema?.`$ref` != null
+
+      // Check if this is an inline object schema
+      if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+        val schemaName = generateInlineSchemaName(method, path, "Request")
+        schemas[schemaName] = extractSchemaModel(schemaName, schema)
+        inlineSchemaRef = schemaName
+      }
+
+      ref = schema?.`$ref`?.let { extractSimpleRef(it) }
+        ?: inlineSchemaRef
+        ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
     }
 
     val arrayItemType =
@@ -240,7 +272,13 @@ class OpenApiParser {
     )
   }
 
-  private fun extractResponseInfo(statusCode: String, response: ApiResponse): ResponseInfo {
+  private fun extractResponseInfo(
+    statusCode: String,
+    response: ApiResponse,
+    method: String,
+    path: String,
+    schemas: MutableMap<String, SchemaModel>
+  ): ResponseInfo {
     val mediaType = response.content?.get("application/json")
       ?: response.content?.values?.firstOrNull()
 
@@ -248,16 +286,38 @@ class OpenApiParser {
 
     val isArray =
       schema != null && (schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true)
-    val ref = if (isArray && schema != null) {
+
+    // Handle inline object schemas
+    var ref: String? = null
+    var inlineSchemaRef: String? = null
+
+    if (isArray && schema != null) {
       val itemsSchema = schema.items
-      itemsSchema?.`$ref`?.let { extractSimpleRef(it) } ?: itemsSchema?.let {
-        findRefForSchema(
-          it,
-          currentOpenAPI
-        )
+      val hasItemsRef = itemsSchema?.`$ref` != null
+
+      // Check if array items are inline object schemas
+      if (itemsSchema != null && !hasItemsRef && (itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true)) {
+        val schemaName = generateInlineSchemaName(method, path, "Item")
+        schemas[schemaName] = extractSchemaModel(schemaName, itemsSchema)
+        inlineSchemaRef = schemaName
       }
+
+      ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
+        ?: inlineSchemaRef
+        ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
     } else {
-      schema?.`$ref`?.let { extractSimpleRef(it) } ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
+      val hasRef = schema?.`$ref` != null
+
+      // Check if this is an inline object schema
+      if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+        val schemaName = generateInlineSchemaName(method, path, "Response")
+        schemas[schemaName] = extractSchemaModel(schemaName, schema)
+        inlineSchemaRef = schemaName
+      }
+
+      ref = schema?.`$ref`?.let { extractSimpleRef(it) }
+        ?: inlineSchemaRef
+        ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
     }
 
     val arrayItemType =
@@ -291,5 +351,31 @@ class OpenApiParser {
     // Extract simple name from #/components/schemas/Name
     val parts = ref.split("/")
     return parts.lastOrNull() ?: ref
+  }
+
+  private fun generateInlineSchemaName(method: String, path: String, suffix: String): String {
+    // Generate a meaningful name from the path and method
+    // e.g., "POST /users" -> "UsersPostRequest", "GET /users" -> "UsersGetResponse"
+    val pathParts = path
+      .removePrefix("/")
+      .removeSuffix("/")
+      .split("/")
+      .filterNot { it.startsWith("{") && it.endsWith("}") }
+      .map { part ->
+        // Convert kebab-case and snake_case to PascalCase
+        part
+          .split(Regex("[-_]"))
+          .joinToString("") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+          }
+      }
+
+    val methodPascal = method.lowercase().replaceFirstChar { it.uppercase() }
+
+    return if (pathParts.isNotEmpty()) {
+      "${pathParts.lastOrNull() ?: "Inline"}${methodPascal}$suffix"
+    } else {
+      "${methodPascal}Inline$suffix"
+    }
   }
 }
