@@ -40,7 +40,7 @@ This creates the executable JAR at `build/quarkus-app/quarkus-run.jar` (requires
 ./gradlew clean quarkusBuild -Dquarkus.package.type=uber-jar
 ```
 
-This creates a single, distributable JAR with all dependencies bundled at `build/openapi-mcp-codegen-1.0.0-SNAPSHOT-runner.jar` (~33MB). Use this for distribution.
+This creates a single, distributable JAR with all dependencies bundled at `build/openapi-mcp-codegen-1.0.0-runner.jar` (~33MB). Use this for distribution.
 
 ## Usage
 
