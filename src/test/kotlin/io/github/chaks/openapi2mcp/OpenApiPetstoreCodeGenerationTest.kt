@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths
 
-class OpenApiParserTest {
+class OpenApiPetstoreCodeGenerationTest {
 
   @Test
   fun `should parse valid OpenAPI specification`() {
