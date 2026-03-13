@@ -219,6 +219,10 @@ class ClientGenerator {
 
   private fun determineParameterType(param: ParameterInfo, domainPackage: String): com.squareup.kotlinpoet.TypeName {
     return when {
+      typeMapper.isPolymorphic(param.oneOf, param.allOf, param.anyOf) -> {
+        // Use the generated polymorphic type name
+        ClassName(domainPackage, typeMapper.toPascalCase(param.ref ?: "Any"))
+      }
       param.isArray -> {
         val elementType = if (param.arrayItemRef != null) {
           ClassName(domainPackage, typeMapper.toPascalCase(param.arrayItemRef))
@@ -262,6 +266,10 @@ class ClientGenerator {
     domainPackage: String
   ): com.squareup.kotlinpoet.TypeName {
     return when {
+      typeMapper.isPolymorphic(requestBody.oneOf, requestBody.allOf, requestBody.anyOf) -> {
+        // Use the generated polymorphic type name
+        ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref ?: "Any"))
+      }
       requestBody.isArray -> {
         val baseType = when {
           requestBody.ref != null -> ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref))
@@ -318,6 +326,10 @@ class ClientGenerator {
       ?: path.responses["default"]
 
     return when {
+      typeMapper.isPolymorphic(successResponse?.oneOf, successResponse?.allOf, successResponse?.anyOf) -> {
+        // Use the generated polymorphic type name
+        ClassName(domainPackage, typeMapper.toPascalCase(successResponse?.ref ?: "Any"))
+      }
       successResponse?.isNoContent == true -> {
         ClassName("kotlin", "Unit")
       }

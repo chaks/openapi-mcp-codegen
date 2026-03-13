@@ -1,0 +1,516 @@
+openapi: 3.0.3
+info:
+  title: Product Catalogue API
+  description: A comprehensive API for managing product catalogues, showcasing inline/non-inline schemas, deep nesting, enums, and schema combinations.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@catalogue.example.com
+
+servers:
+  - url: https://api.catalogue.example.com/v1
+    description: Production Server
+
+tags:
+  - name: products
+    description: Operations regarding products and inventory
+  - name: categories
+    description: Product categorization operations
+  - name: inline
+    description: Demonstrations of inline definitions
+
+paths:
+  # ---------------------------------------------------------
+  # PATH 1: Using Non-Inline Schemas (Components)
+  # ---------------------------------------------------------
+  /products:
+    post:
+      tags:
+        - products
+      summary: Create a new product
+      description: Adds a new product to the catalogue. Uses `$ref` to point to schemas defined in `components/schemas`. Demonstrates 3 levels of nesting (Product -> Manufacturer -> Location).
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductConfirmation'
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+
+    get:
+      tags:
+        - products
+      summary: List all products
+      description: Retrieve a paginated list of products with optional filtering.
+      operationId: listProducts
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Number of products per page
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: category
+          in: query
+          description: Filter by product category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+
+  /products/{productId}:
+    get:
+      tags:
+        - products
+      summary: Get product by ID
+      description: Retrieve detailed information about a specific product.
+      operationId: getProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Unique product identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found
+
+  # ---------------------------------------------------------
+  # PATH 2: Using Inline Schemas
+  # ---------------------------------------------------------
+  /quick-search:
+    get:
+      tags:
+        - inline
+      summary: Quick product search with inline schema
+      description: Fast search endpoint with response schema defined directly inline rather than using components. Demonstrates 3-level nesting for search metadata.
+      operationId: quickSearch
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results with inline schema
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - query
+                  - results
+                properties:
+                  query:
+                    type: string
+                    description: The search query that was executed
+                    example: wireless headphones
+                  results:
+                    type: array
+                    description: Array of matching products
+                    items:
+                      type: object
+                      required:
+                        - productId
+                        - name
+                        - searchMetadata
+                      properties:
+                        productId:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                          description: Product display name
+                        price:
+                          type: number
+                          format: double
+                        searchMetadata:
+                          type: object
+                          description: Search relevance and ranking information (Level 2 nesting)
+                          properties:
+                            relevanceScore:
+                              type: number
+                              format: float
+                              minimum: 0
+                              maximum: 1
+                              description: Relevance score from 0 to 1
+                            matchType:
+                              type: string
+                              description: Type of match (Level 3 nesting)
+                              enum:
+                                - EXACT
+                                - PARTIAL
+                                - FUZZY
+                            matchedTerms:
+                              type: array
+                              description: Terms that matched within the product (Level 3 nesting)
+                              items:
+                                type: string
+
+  # ---------------------------------------------------------
+  # PATH 3: Schema Combinations (oneOf, allOf)
+  # ---------------------------------------------------------
+  /inventory-batch:
+    post:
+      tags:
+        - products
+      summary: Process inventory batch with polymorphic payloads
+      description: Accepts inventory updates for either SimpleItem (single SKU) or BatchItem (multiple SKUs) using oneOf, and returns a combined processing result using allOf.
+      operationId: processInventoryBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/SimpleItem'
+                - $ref: '#/components/schemas/BatchItem'
+      responses:
+        '200':
+          description: Processing confirmation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      processedAt:
+                        type: string
+                        format: date-time
+                        description: Timestamp when batch was processed
+                      inventoryChange:
+                        type: integer
+                        description: Net inventory change
+
+# ---------------------------------------------------------
+# COMPONENTS
+# ---------------------------------------------------------
+components:
+  schemas:
+    # --- Reusable Enums ---
+    ProductStatus:
+      type: string
+      description: Current status of a product in the catalogue
+      enum:
+        - DRAFT
+        - ACTIVE
+        - OUT_OF_STOCK
+        - DISCONTINUED
+      default: active
+
+    InventoryCondition:
+      type: string
+      description: Condition rating for used items
+      enum:
+        - NEW
+        - LIKE_NEW
+        - GOOD
+        - FAIR
+        - POOR
+
+    # --- Base / Reusable Objects ---
+    ErrorModel:
+      type: object
+      description: Standard error response structure
+      properties:
+        code:
+          type: integer
+          description: HTTP status code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+    BaseResponse:
+      type: object
+      description: Base response structure with common fields
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: Whether the operation was successful
+        requestId:
+          type: string
+          format: uuid
+          description: Unique identifier for tracking this request
+
+    # --- Deep Nesting Example (Product Manufacturer Hierarchy) ---
+    # Level 3: Contact information
+    ContactInfo:
+      type: object
+      description: Primary contact details for the manufacturer (Level 3 nesting)
+      properties:
+        phone:
+          type: string
+          example: "+1-555-123-4567"
+          description: Main phone number with country code
+        email:
+          type: string
+          format: email
+          example: "contact@manufacturer.com"
+          description: Primary email address
+        website:
+          type: string
+          format: uri
+          example: "https://manufacturer.example.com"
+          description: Official website URL
+
+    # Level 2: Address
+    ManufacturerAddress:
+      type: object
+      description: Manufacturer facility address (Level 2 nesting)
+      required:
+        - street
+        - city
+        - country
+      properties:
+        street:
+          type: string
+          example: "123 Innovation Drive"
+        city:
+          type: string
+          example: "San Francisco"
+        state:
+          type: string
+          example: "CA"
+        postalCode:
+          type: string
+          example: "94107"
+        country:
+          type: string
+          example: "United States"
+        contactInfo:
+          $ref: '#/components/schemas/ContactInfo'
+
+    # Level 1: Manufacturer
+    Manufacturer:
+      type: object
+      description: Product manufacturer information (Level 1 nesting)
+      required:
+        - name
+      properties:
+        manufacturerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Manufacturer or brand name
+        website:
+          type: string
+          format: uri
+        headquarters:
+          $ref: '#/components/schemas/ManufacturerAddress'
+        establishedYear:
+          type: integer
+          minimum: 1800
+          maximum: 2100
+          description: Year the company was founded
+
+    # --- Main Product Entity ---
+    Product:
+      type: object
+      description: Complete product catalogue entry (Root Level)
+      required:
+        - name
+        - sku
+        - price
+        - manufacturer
+      properties:
+        productId:
+          type: string
+          format: uuid
+          description: Unique product identifier
+        sku:
+          type: string
+          description: Stock Keeping Unit - unique alphanumeric product code
+          pattern: '^[A-Z0-9-]{8,20}$'
+        name:
+          type: string
+          description: Product display name shown to customers
+          minLength: 3
+          maxLength: 200
+        shortDescription:
+          type: string
+          description: Brief product description for search results
+          maxLength: 150
+        fullDescription:
+          type: string
+          description: Detailed product specification and features
+        price:
+          type: number
+          format: double
+          minimum: 0
+          description: Regular selling price in USD
+        salePrice:
+          type: number
+          format: double
+          minimum: 0
+          description: Discounted sale price, if applicable
+        currency:
+          type: string
+          default: USD
+          enum: [USD, EUR, GBP, JPY, CAD]
+        stockLevel:
+          type: integer
+          minimum: 0
+          description: Current inventory quantity
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        manufacturer:
+          $ref: '#/components/schemas/Manufacturer'
+        specifications:
+          type: object
+          description: Key-value pairs for product specifications
+          additionalProperties:
+            type: string
+          example:
+            weight: "2.5 kg"
+            dimensions: "30 x 20 x 10 cm"
+            material: "Aluminum alloy"
+        categories:
+          type: array
+          description: Product categories for classification
+          items:
+            type: string
+          minItems: 1
+        images:
+          type: array
+          description: URLs to product images
+          items:
+            type: string
+            format: uri
+        tags:
+          type: array
+          description: Search and filter tags
+          items:
+            type: string
+
+    ProductConfirmation:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            product:
+              $ref: '#/components/schemas/Product'
+            estimatedDelivery:
+              type: string
+              format: date-time
+              description: Expected date when product becomes available
+
+    # --- Polymorphism Examples for Inventory ---
+    SimpleItem:
+      type: object
+      description: Single SKU inventory update
+      required:
+        - sku
+        - quantity
+        - operation
+      properties:
+        itemType:
+          type: string
+          enum: [simple]
+          description: Discriminator for payload type
+        sku:
+          type: string
+          description: Stock Keeping Unit to update
+          pattern: '^[A-Z0-9-]{8,20}$'
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity to adjust
+        operation:
+          type: string
+          enum: [ADD, REMOVE, SET]
+          description: Type of inventory adjustment
+        reason:
+          type: string
+          description: Optional reason code for audit trail
+
+    BatchItem:
+      type: object
+      description: Multiple SKU inventory update in single request
+      required:
+        - batchId
+        - items
+      properties:
+        itemType:
+          type: string
+          enum: [batch]
+          description: Discriminator for payload type
+        batchId:
+          type: string
+          format: uuid
+          description: Batch reference identifier
+        items:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: object
+            required:
+              - sku
+              - quantity
+            properties:
+              sku:
+                type: string
+              quantity:
+                type: integer
+                minimum: 1
+        priority:
+          type: string
+          enum: [LOW, NORMAL, HIGH, URGENT]
+          default: normal
+          description: Processing priority level
+        scheduledFor:
+          type: string
+          format: date-time
+          description: Optional scheduled processing time

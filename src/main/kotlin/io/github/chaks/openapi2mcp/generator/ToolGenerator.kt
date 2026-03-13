@@ -219,6 +219,10 @@ class ToolGenerator {
     domainPackage: String
   ): com.squareup.kotlinpoet.TypeName {
     return when {
+      typeMapper.isPolymorphic(param.oneOf, param.allOf, param.anyOf) -> {
+        // Use the generated polymorphic type name
+        ClassName(domainPackage, typeMapper.toPascalCase(param.ref ?: "Any"))
+      }
       param.isArray -> {
         val elementType = if (param.arrayItemRef != null) {
           ClassName(domainPackage, typeMapper.toPascalCase(param.arrayItemRef))
@@ -261,6 +265,10 @@ class ToolGenerator {
     domainPackage: String
   ): com.squareup.kotlinpoet.TypeName {
     return when {
+      typeMapper.isPolymorphic(requestBody.oneOf, requestBody.allOf, requestBody.anyOf) -> {
+        // Use the generated polymorphic type name
+        ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref ?: "Any"))
+      }
       requestBody.isArray -> {
         val baseType = if (requestBody.ref != null) {
           ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref))
@@ -312,6 +320,10 @@ class ToolGenerator {
       ?: path.responses["default"]
 
     return when {
+      typeMapper.isPolymorphic(successResponse?.oneOf, successResponse?.allOf, successResponse?.anyOf) -> {
+        // Use the generated polymorphic type name
+        ClassName(domainPackage, typeMapper.toPascalCase(successResponse?.ref ?: "Any"))
+      }
       successResponse?.isNoContent == true -> {
         ClassName("kotlin", "String") // Return success message
       }

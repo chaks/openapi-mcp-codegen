@@ -85,6 +85,36 @@ class OpenApiParser {
 
     val required = schema.required?.toSet() ?: emptySet()
 
+    // Extract oneOf, allOf, anyOf references
+    val oneOfRefs = schema.oneOf?.mapNotNull { extractRef(it) }
+    val allOfRefs = schema.allOf?.mapNotNull { extractRef(it) }
+    val anyOfRefs = schema.anyOf?.mapNotNull { extractRef(it) }
+
+    // Extract additionalProperties for map-like objects
+    val additionalProperties = schema.additionalProperties?.let {
+      if (it is Schema<*>) {
+        extractPropertyInfo("additionalProperties", it)
+      } else {
+        // Boolean or other type - use Any
+        PropertyInfo(
+          type = "any",
+          format = null,
+          description = null,
+          isNullable = true,
+          ref = null,
+          isArray = false,
+          arrayItemRef = null,
+          arrayItemType = null,
+          arrayItemFormat = null,
+          enum = null,
+          defaultValue = null,
+          oneOf = null,
+          allOf = null,
+          anyOf = null
+        )
+      }
+    }
+
     return SchemaModel(
       name = name,
       description = schema.description,
@@ -93,8 +123,17 @@ class OpenApiParser {
       required = required,
       enum = schema.enum?.map { it.toString() },
       format = schema.format,
-      ref = schema.`$ref`
+      ref = schema.`$ref`?.let { extractSimpleRef(it) },
+      oneOf = oneOfRefs,
+      allOf = allOfRefs,
+      anyOf = anyOfRefs,
+      additionalProperties = additionalProperties
     )
+  }
+
+  private fun extractRef(schema: Schema<*>): String? {
+    return schema.`$ref`?.let { extractSimpleRef(it) }
+      ?: findRefForSchema(schema, currentOpenAPI)
   }
 
   private fun extractPropertyInfo(name: String, schema: Schema<*>): PropertyInfo {
@@ -114,6 +153,11 @@ class OpenApiParser {
     val arrayItemType = if (isArray) schema.items?.type ?: schema.items?.types?.firstOrNull() else null
     val arrayItemFormat = if (isArray) schema.items?.format else null
 
+    // Extract oneOf, allOf, anyOf references
+    val oneOfRefs = schema.oneOf?.mapNotNull { extractRef(it) }
+    val allOfRefs = schema.allOf?.mapNotNull { extractRef(it) }
+    val anyOfRefs = schema.anyOf?.mapNotNull { extractRef(it) }
+
     return PropertyInfo(
       type = schema.type ?: schema.types?.firstOrNull(),
       format = schema.format,
@@ -125,7 +169,10 @@ class OpenApiParser {
       arrayItemType = arrayItemType,
       arrayItemFormat = arrayItemFormat,
       enum = schema.enum?.map { it.toString() },
-      defaultValue = schema.`default`?.toString()
+      defaultValue = schema.`default`?.toString(),
+      oneOf = oneOfRefs,
+      allOf = allOfRefs,
+      anyOf = anyOfRefs
     )
   }
 
@@ -223,9 +270,12 @@ class OpenApiParser {
     val isArray =
       schema != null && (schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true)
 
-    // Handle inline object schemas
+    // Handle inline object schemas and polymorphic schemas
     var ref: String? = null
     var inlineSchemaRef: String? = null
+    var oneOfRefs: List<String>? = null
+    var allOfRefs: List<String>? = null
+    var anyOfRefs: List<String>? = null
 
     if (isArray && schema != null) {
       val itemsSchema = schema.items
@@ -244,11 +294,33 @@ class OpenApiParser {
     } else {
       val hasRef = schema?.`$ref` != null
 
-      // Check if this is an inline object schema
-      if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+      // Check for polymorphic schemas (oneOf, allOf, anyOf)
+      val hasOneOf = schema?.oneOf?.isNotEmpty() == true
+      val hasAllOf = schema?.allOf?.isNotEmpty() == true
+      val hasAnyOf = schema?.anyOf?.isNotEmpty() == true
+
+      if (hasOneOf || hasAllOf || hasAnyOf) {
+        // Generate a wrapper schema for polymorphic types
         val schemaName = generateInlineSchemaName(method, path, "Request")
         schemas[schemaName] = extractSchemaModel(schemaName, schema)
         inlineSchemaRef = schemaName
+
+        oneOfRefs = schema?.oneOf?.mapNotNull { extractRef(it) }
+        allOfRefs = schema?.allOf?.mapNotNull { extractRef(it) }
+        anyOfRefs = schema?.anyOf?.mapNotNull { extractRef(it) }
+      } else if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+        // Check if this is an inline object schema or a resolved component schema reference
+        val matchingComponentSchema = findRefForSchema(schema, currentOpenAPI)
+        if (matchingComponentSchema != null) {
+          // Use the existing component schema reference instead of creating a duplicate
+          // This prevents duplicate domain classes like PetPostRequest/PetPutRequest when both reference the same component schema
+          ref = matchingComponentSchema
+        } else {
+          // This is truly an inline schema - generate a new name
+          val schemaName = generateInlineSchemaName(method, path, "Request")
+          schemas[schemaName] = extractSchemaModel(schemaName, schema)
+          inlineSchemaRef = schemaName
+        }
       }
 
       ref = schema?.`$ref`?.let { extractSimpleRef(it) }
@@ -268,7 +340,10 @@ class OpenApiParser {
       ref = ref,
       isArray = isArray,
       arrayItemType = arrayItemType,
-      arrayItemFormat = arrayItemFormat
+      arrayItemFormat = arrayItemFormat,
+      oneOf = oneOfRefs,
+      allOf = allOfRefs,
+      anyOf = anyOfRefs
     )
   }
 
@@ -287,9 +362,12 @@ class OpenApiParser {
     val isArray =
       schema != null && (schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true)
 
-    // Handle inline object schemas
+    // Handle inline object schemas and polymorphic schemas
     var ref: String? = null
     var inlineSchemaRef: String? = null
+    var oneOfRefs: List<String>? = null
+    var allOfRefs: List<String>? = null
+    var anyOfRefs: List<String>? = null
 
     if (isArray && schema != null) {
       val itemsSchema = schema.items
@@ -308,11 +386,33 @@ class OpenApiParser {
     } else {
       val hasRef = schema?.`$ref` != null
 
-      // Check if this is an inline object schema
-      if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+      // Check for polymorphic schemas (oneOf, allOf, anyOf)
+      val hasOneOf = schema?.oneOf?.isNotEmpty() == true
+      val hasAllOf = schema?.allOf?.isNotEmpty() == true
+      val hasAnyOf = schema?.anyOf?.isNotEmpty() == true
+
+      if (hasOneOf || hasAllOf || hasAnyOf) {
+        // Generate a wrapper schema for polymorphic types
         val schemaName = generateInlineSchemaName(method, path, "Response")
         schemas[schemaName] = extractSchemaModel(schemaName, schema)
         inlineSchemaRef = schemaName
+
+        oneOfRefs = schema?.oneOf?.mapNotNull { extractRef(it) }
+        allOfRefs = schema?.allOf?.mapNotNull { extractRef(it) }
+        anyOfRefs = schema?.anyOf?.mapNotNull { extractRef(it) }
+      } else if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+        // Check if this is an inline object schema or a resolved component schema reference
+        val matchingComponentSchema = findRefForSchema(schema, currentOpenAPI)
+        if (matchingComponentSchema != null) {
+          // Use the existing component schema reference instead of creating a duplicate
+          // This prevents duplicate domain classes when multiple responses reference the same component schema
+          ref = matchingComponentSchema
+        } else {
+          // This is truly an inline schema - generate a new name
+          val schemaName = generateInlineSchemaName(method, path, "Response")
+          schemas[schemaName] = extractSchemaModel(schemaName, schema)
+          inlineSchemaRef = schemaName
+        }
       }
 
       ref = schema?.`$ref`?.let { extractSimpleRef(it) }
@@ -333,7 +433,10 @@ class OpenApiParser {
       isArray = isArray,
       arrayItemType = arrayItemType,
       arrayItemFormat = arrayItemFormat,
-      isNoContent = statusCode == "204"
+      isNoContent = statusCode == "204",
+      oneOf = oneOfRefs,
+      allOf = allOfRefs,
+      anyOf = anyOfRefs
     )
   }
 

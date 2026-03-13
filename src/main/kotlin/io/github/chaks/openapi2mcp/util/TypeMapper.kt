@@ -179,4 +179,41 @@ class TypeMapper {
   fun isNullable(propertyName: String, required: Set<String>): Boolean {
     return propertyName !in required
   }
+
+  /**
+   * Checks if a type uses polymorphic composition.
+   *
+   * @param oneOf List of oneOf references
+   * @param allOf List of allOf references
+   * @param anyOf List of anyOf references
+   * @return True if any composition is present
+   */
+  fun isPolymorphic(
+    oneOf: List<String>?,
+    allOf: List<String>?,
+    anyOf: List<String>?
+  ): Boolean {
+    return !oneOf.isNullOrEmpty() || !allOf.isNullOrEmpty() || !anyOf.isNullOrEmpty()
+  }
+
+  /**
+   * Generates a type name for polymorphic schemas.
+   *
+   * @param oneOf List of oneOf references
+   * @param allOf List of allOf references
+   * @param anyOf List of anyOf references
+   * @return Appropriate type name for the composition
+   */
+  fun mapPolymorphicType(
+    oneOf: List<String>?,
+    allOf: List<String>?,
+    anyOf: List<String>?
+  ): String? {
+    return when {
+      !oneOf.isNullOrEmpty() -> oneOf.joinToString("Or") { toPascalCase(it) }
+      !allOf.isNullOrEmpty() -> allOf.joinToString("And") { toPascalCase(it) }
+      !anyOf.isNullOrEmpty() -> anyOf.joinToString("Or") { toPascalCase(it) }
+      else -> null
+    }
+  }
 }

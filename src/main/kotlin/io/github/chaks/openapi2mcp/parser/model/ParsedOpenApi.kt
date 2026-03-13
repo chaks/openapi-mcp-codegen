@@ -38,6 +38,10 @@ data class ApiInfo(
  * @property required Set of required property names
  * @property enum Optional enum values
  * @property format Optional format (e.g., int32, date-time)
+ * @property oneOf List of schema references for oneOf composition
+ * @property allOf List of schema references for allOf composition
+ * @property anyOf List of schema references for anyOf composition
+ * @property additionalProperties Optional PropertyInfo for map-like objects (additionalProperties)
  */
 data class SchemaModel(
   val name: String,
@@ -47,7 +51,11 @@ data class SchemaModel(
   val required: Set<String>,
   val enum: List<String>?,
   val format: String?,
-  val ref: String?
+  val ref: String?,
+  val oneOf: List<String>? = null,
+  val allOf: List<String>? = null,
+  val anyOf: List<String>? = null,
+  val additionalProperties: PropertyInfo? = null
 )
 
 /**
@@ -60,6 +68,9 @@ data class SchemaModel(
  * @property ref Reference to another schema ($ref)
  * @property isArray Whether this is an array type
  * @property arrayItemRef Reference type for array items
+ * @property oneOf List of schema references for oneOf composition
+ * @property allOf List of schema references for allOf composition
+ * @property anyOf List of schema references for anyOf composition
  */
 data class PropertyInfo(
   val type: String?,
@@ -72,7 +83,10 @@ data class PropertyInfo(
   val arrayItemType: String? = null,
   val arrayItemFormat: String? = null,
   val enum: List<String>?,
-  val defaultValue: String?
+  val defaultValue: String?,
+  val oneOf: List<String>? = null,
+  val allOf: List<String>? = null,
+  val anyOf: List<String>? = null
 )
 
 /**
@@ -111,6 +125,9 @@ data class PathModel(
  * @property format Optional format
  * @property ref Reference to a schema
  * @property isArray Whether this is an array type
+ * @property oneOf List of schema references for oneOf composition
+ * @property allOf List of schema references for allOf composition
+ * @property anyOf List of schema references for anyOf composition
  */
 data class ParameterInfo(
   val name: String,
@@ -124,7 +141,10 @@ data class ParameterInfo(
   val arrayItemRef: String?,
   val arrayItemType: String? = null,
   val arrayItemFormat: String? = null,
-  val defaultValue: String?
+  val defaultValue: String?,
+  val oneOf: List<String>? = null,
+  val allOf: List<String>? = null,
+  val anyOf: List<String>? = null
 )
 
 /**
@@ -135,6 +155,9 @@ data class ParameterInfo(
  * @property contentType Content type (e.g., application/json)
  * @property ref Reference to the schema
  * @property isArray Whether the body is an array
+ * @property oneOf List of schema references for oneOf composition
+ * @property allOf List of schema references for allOf composition
+ * @property anyOf List of schema references for anyOf composition
  */
 data class RequestBodyInfo(
   val description: String?,
@@ -145,7 +168,10 @@ data class RequestBodyInfo(
   val ref: String?,
   val isArray: Boolean,
   val arrayItemType: String? = null,
-  val arrayItemFormat: String? = null
+  val arrayItemFormat: String? = null,
+  val oneOf: List<String>? = null,
+  val allOf: List<String>? = null,
+  val anyOf: List<String>? = null
 )
 
 /**
@@ -156,6 +182,9 @@ data class RequestBodyInfo(
  * @property ref Reference to the schema
  * @property isArray Whether the response is an array
  * @property isNoContent Whether this is a 204 No Content response
+ * @property oneOf List of schema references for oneOf composition
+ * @property allOf List of schema references for allOf composition
+ * @property anyOf List of schema references for anyOf composition
  */
 data class ResponseInfo(
   val statusCode: String,
@@ -166,5 +195,8 @@ data class ResponseInfo(
   val isArray: Boolean,
   val arrayItemType: String? = null,
   val arrayItemFormat: String? = null,
-  val isNoContent: Boolean
+  val isNoContent: Boolean,
+  val oneOf: List<String>? = null,
+  val allOf: List<String>? = null,
+  val anyOf: List<String>? = null
 )
