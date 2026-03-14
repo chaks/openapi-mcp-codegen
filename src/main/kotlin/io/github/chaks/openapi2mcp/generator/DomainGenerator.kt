@@ -1,24 +1,35 @@
 package io.github.chaks.openapi2mcp.generator
 
-import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import io.github.chaks.openapi2mcp.cli.CliOptions
 import io.github.chaks.openapi2mcp.parser.model.SchemaModel
 import io.github.chaks.openapi2mcp.util.TypeMapper
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
-import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 
 /**
- * Generates domain data classes from OpenAPI schema definitions.
+ * Interface for generating domain data classes from OpenAPI schema definitions.
  *
- * Uses KotlinPoet to generate type-safe Kotlin data classes with
- * appropriate Jackson/JSON-B annotations for serialization.
+ * Enables DIP compliance and testability for domain code generation.
+ */
+interface DomainGenerator {
+
+  /**
+   * Generate domain classes from schemas.
+   *
+   * @param options CLI options containing output directory and package info
+   * @param schemas Map of schema names to SchemaModel
+   */
+  fun generate(options: CliOptions, schemas: Map<String, SchemaModel>)
+}
+
+/**
+ * Default implementation of DomainGenerator using KotlinPoet.
  */
 @ApplicationScoped
-class DomainGenerator {
+class DefaultDomainGenerator : DomainGenerator {
 
   @Inject
   private lateinit var typeMapper: TypeMapper
@@ -29,7 +40,7 @@ class DomainGenerator {
    * @param options CLI options containing output directory and package info
    * @param schemas Map of schema names to SchemaModel
    */
-  fun generate(options: CliOptions, schemas: Map<String, SchemaModel>) {
+  override fun generate(options: CliOptions, schemas: Map<String, SchemaModel>) {
     val domainPackage = options.domainPackage
     val domainPath = getDomainPath(options.output, domainPackage)
 
@@ -48,12 +59,12 @@ class DomainGenerator {
     generateNestedSchemas(options, schemas)
   }
 
-  private fun getDomainPath(outputDir: Path, domainPackage: String): Path {
+  private fun getDomainPath(outputDir: java.nio.file.Path, domainPackage: String): java.nio.file.Path {
     val packagePath = domainPackage.replace('.', '/')
     return outputDir.resolve("src/main/kotlin").resolve(packagePath)
   }
 
-  private fun generateDomainClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateDomainClass(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
 
     // Check if this is a polymorphic schema
@@ -66,7 +77,7 @@ class DomainGenerator {
     }
   }
 
-  private fun generateRegularDomainClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateRegularDomainClass(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
 
     // Handle enum schemas (no properties but has enum values)
@@ -84,34 +95,34 @@ class DomainGenerator {
       return generateEmptyClass(packageName, schema)
     }
 
-    val classBuilder = TypeSpec.classBuilder(className)
-      .addModifiers(KModifier.DATA)
+    val classBuilder = com.squareup.kotlinpoet.TypeSpec.classBuilder(className)
+      .addModifiers(com.squareup.kotlinpoet.KModifier.DATA)
       .addKdoc(generateClassKdoc(schema))
 
     // Add Jackson annotations for JSON serialization
     classBuilder.addAnnotation(
-      ClassName("com.fasterxml.jackson.databind.annotation", "JsonSerialize")
+      com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.databind.annotation", "JsonSerialize")
     )
     classBuilder.addAnnotation(
-      ClassName("com.fasterxml.jackson.databind.annotation", "JsonDeserialize")
+      com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.databind.annotation", "JsonDeserialize")
     )
 
     // Generate constructor parameters and properties
-    val constructorBuilder = FunSpec.constructorBuilder()
+    val constructorBuilder = com.squareup.kotlinpoet.FunSpec.constructorBuilder()
 
     schema.properties.forEach { (propName, propInfo) ->
       val safeName = typeMapper.toSafeIdentifier(propName)
       val isNullable = propInfo.isNullable || schema.required.contains(propName).not()
       val type = determinePropertyType(propInfo, packageName).copy(nullable = isNullable)
 
-      val propertyBuilder = PropertySpec.builder(safeName, type)
+      val propertyBuilder = com.squareup.kotlinpoet.PropertySpec.builder(safeName, type)
         .addKdoc(propInfo.description ?: "Property: $propName")
         .initializer(safeName)
 
       // Add annotations
       propertyBuilder.addAnnotation(
         com.squareup.kotlinpoet.AnnotationSpec.builder(
-          ClassName("com.fasterxml.jackson.annotation", "JsonProperty")
+          com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.annotation", "JsonProperty")
         )
           .addMember("%S", propName)
           .build()
@@ -126,10 +137,9 @@ class DomainGenerator {
         propertyBuilder.addKdoc("\nDefault value: ${propInfo.defaultValue}")
       }
 
-
       classBuilder.addProperty(propertyBuilder.build())
 
-      val parameterBuilder = ParameterSpec.builder(safeName, type)
+      val parameterBuilder = com.squareup.kotlinpoet.ParameterSpec.builder(safeName, type)
       if (isNullable) {
         parameterBuilder.defaultValue("null")
       }
@@ -140,7 +150,7 @@ class DomainGenerator {
 
     // Add toString, equals, hashCode for data classes are auto-generated
 
-    return FileSpec.builder(packageName, schema.name)
+    return com.squareup.kotlinpoet.FileSpec.builder(packageName, schema.name)
       .addType(classBuilder.build())
       .addImport("com.fasterxml.jackson.databind.annotation", "JsonSerialize")
       .addImport("com.fasterxml.jackson.databind.annotation", "JsonDeserialize")
@@ -148,16 +158,20 @@ class DomainGenerator {
       .build()
   }
 
-  private fun generateMapTypeAlias(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateMapTypeAlias(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
 
-    // Determine the value type for the map
+    // Determine value type for map
     val (valueType, valueTypeStr) = if (schema.additionalProperties?.ref != null) {
-      val cn = ClassName(packageName, typeMapper.toPascalCase(schema.additionalProperties.ref!!))
+      val cn =
+        com.squareup.kotlinpoet.ClassName(packageName, typeMapper.toPascalCase(schema.additionalProperties.ref!!))
       Pair(cn, cn.simpleName)
     } else if (schema.additionalProperties?.arrayItemRef != null) {
-      val elementType = ClassName(packageName, typeMapper.toPascalCase(schema.additionalProperties.arrayItemRef!!))
-      val cn = ClassName("kotlin.collections", "List").parameterizedBy(elementType)
+      val elementType = com.squareup.kotlinpoet.ClassName(
+        packageName,
+        typeMapper.toPascalCase(schema.additionalProperties.arrayItemRef!!)
+      )
+      val cn = com.squareup.kotlinpoet.ClassName("kotlin.collections", "List").parameterizedBy(elementType)
       Pair(cn, "List<${elementType.simpleName}>")
     } else {
       val mappedType = typeMapper.mapType(
@@ -165,19 +179,19 @@ class DomainGenerator {
         schema.additionalProperties?.format
       )
       val cn = when (mappedType) {
-        "String" -> ClassName("kotlin", "String")
-        "Int" -> ClassName("kotlin", "Int")
-        "Long" -> ClassName("kotlin", "Long")
-        "Float" -> ClassName("kotlin", "Float")
-        "Double" -> ClassName("kotlin", "Double")
-        "Boolean" -> ClassName("kotlin", "Boolean")
-        else -> ClassName("kotlin", "Any")
+        "String" -> com.squareup.kotlinpoet.ClassName("kotlin", "String")
+        "Int" -> com.squareup.kotlinpoet.ClassName("kotlin", "Int")
+        "Long" -> com.squareup.kotlinpoet.ClassName("kotlin", "Long")
+        "Float" -> com.squareup.kotlinpoet.ClassName("kotlin", "Float")
+        "Double" -> com.squareup.kotlinpoet.ClassName("kotlin", "Double")
+        "Boolean" -> com.squareup.kotlinpoet.ClassName("kotlin", "Boolean")
+        else -> com.squareup.kotlinpoet.ClassName("kotlin", "Any")
       }
       Pair(cn, mappedType)
     }
 
-    val mapType = ClassName("kotlin.collections", "Map")
-      .parameterizedBy(ClassName("kotlin", "String"), valueType)
+    val mapType = com.squareup.kotlinpoet.ClassName("kotlin.collections", "Map")
+      .parameterizedBy(com.squareup.kotlinpoet.ClassName("kotlin", "String"), valueType)
 
     val kdoc = buildString {
       appendLine("Type alias for Map<String, $valueTypeStr>")
@@ -189,32 +203,32 @@ class DomainGenerator {
       }
     }
 
-    val typeAliasSpec = TypeAliasSpec.builder(className, mapType)
+    val typeAliasSpec = com.squareup.kotlinpoet.TypeAliasSpec.builder(className, mapType)
       .addKdoc(kdoc.trimIndent())
       .build()
 
-    return FileSpec.builder(packageName, schema.name)
+    return com.squareup.kotlinpoet.FileSpec.builder(packageName, schema.name)
       .addTypeAlias(typeAliasSpec)
       .indent("    ")
       .build()
   }
 
-  private fun generateEmptyClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateEmptyClass(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
 
-    val classBuilder = TypeSpec.classBuilder(className)
+    val classBuilder = com.squareup.kotlinpoet.TypeSpec.classBuilder(className)
       .addKdoc(generateClassKdoc(schema))
 
-    return FileSpec.builder(packageName, schema.name)
+    return com.squareup.kotlinpoet.FileSpec.builder(packageName, schema.name)
       .addType(classBuilder.build())
       .indent("    ")
       .build()
   }
 
-  private fun generateEnumClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateEnumClass(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
 
-    val enumBuilder = TypeSpec.enumBuilder(className)
+    val enumBuilder = com.squareup.kotlinpoet.TypeSpec.enumBuilder(className)
       .addKdoc(generateClassKdoc(schema))
 
     // Add enum values
@@ -223,13 +237,16 @@ class DomainGenerator {
       enumBuilder.addEnumConstant(enumName)
     }
 
-    return FileSpec.builder(packageName, schema.name)
+    return com.squareup.kotlinpoet.FileSpec.builder(packageName, schema.name)
       .addType(enumBuilder.build())
       .indent("    ")
       .build()
   }
 
-  private fun generatePolymorphicDomainClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generatePolymorphicDomainClass(
+    packageName: String,
+    schema: SchemaModel
+  ): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
 
     // Handle oneOf/anyOf - generate sealed class with subclasses
@@ -246,12 +263,12 @@ class DomainGenerator {
     return generateRegularDomainClass(packageName, schema)
   }
 
-  private fun generateSealedDomainClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateSealedDomainClass(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
     val refs = schema.oneOf ?: schema.anyOf ?: emptyList()
 
-    val sealedClassBuilder = TypeSpec.classBuilder(className)
-      .addModifiers(KModifier.SEALED)
+    val sealedClassBuilder = com.squareup.kotlinpoet.TypeSpec.classBuilder(className)
+      .addModifiers(com.squareup.kotlinpoet.KModifier.SEALED)
       .addKdoc(buildString {
         appendLine("Generated sealed class from OpenAPI schema: ${schema.name}")
         if (schema.description != null) {
@@ -267,8 +284,8 @@ class DomainGenerator {
 
     // Add Jackson @JsonTypeInfo annotation for polymorphic serialization
     sealedClassBuilder.addAnnotation(
-      AnnotationSpec.builder(
-        ClassName("com.fasterxml.jackson.annotation", "JsonTypeInfo")
+      com.squareup.kotlinpoet.AnnotationSpec.builder(
+        com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.annotation", "JsonTypeInfo")
       )
         .addMember("use = com.fasterxml.jackson.annotation.JsonTypeInfo.Id.NAME")
         .addMember("include = com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY")
@@ -276,28 +293,28 @@ class DomainGenerator {
         .build()
     )
 
-    val fileSpecBuilder = FileSpec.builder(packageName, schema.name)
+    val fileSpecBuilder = com.squareup.kotlinpoet.FileSpec.builder(packageName, schema.name)
 
     // Add subclasses for each reference with "Variant" suffix to avoid conflicts
     refs.forEach { ref ->
       val refClassName = typeMapper.toPascalCase(ref)
       val subclassName = "${refClassName}Variant"
-      val subclassBuilder = TypeSpec.classBuilder(subclassName)
-        .addModifiers(KModifier.DATA)
-        .superclass(ClassName(packageName, className))
-        .addKdoc("Represents a $ref in the polymorphic $className type.")
+      val subclassBuilder = com.squareup.kotlinpoet.TypeSpec.classBuilder(subclassName)
+        .addModifiers(com.squareup.kotlinpoet.KModifier.DATA)
+        .superclass(com.squareup.kotlinpoet.ClassName(packageName, className))
+        .addKdoc("Represents a $ref in polymorphic $className type.")
 
       // Add Jackson @JsonTypeName annotation
       subclassBuilder.addAnnotation(
-        AnnotationSpec.builder(
-          ClassName("com.fasterxml.jackson.annotation", "JsonTypeName")
+        com.squareup.kotlinpoet.AnnotationSpec.builder(
+          com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.annotation", "JsonTypeName")
         ).addMember("%S", ref).build()
       )
 
-      // Add a value property that references the actual schema type
-      val valueProperty = PropertySpec.builder(
+      // Add a value property that references actual schema type
+      val valueProperty = com.squareup.kotlinpoet.PropertySpec.builder(
         "value",
-        ClassName(packageName, refClassName)
+        com.squareup.kotlinpoet.ClassName(packageName, refClassName)
       )
         .addKdoc("The underlying $ref value")
         .initializer("value")
@@ -305,8 +322,8 @@ class DomainGenerator {
 
       subclassBuilder.addProperty(valueProperty)
 
-      val constructorBuilder = FunSpec.constructorBuilder()
-        .addParameter("value", ClassName(packageName, refClassName))
+      val constructorBuilder = com.squareup.kotlinpoet.FunSpec.constructorBuilder()
+        .addParameter("value", com.squareup.kotlinpoet.ClassName(packageName, refClassName))
       subclassBuilder.primaryConstructor(constructorBuilder.build())
 
       fileSpecBuilder.addType(subclassBuilder.build())
@@ -321,12 +338,12 @@ class DomainGenerator {
       .build()
   }
 
-  private fun generateAllOfDomainClass(packageName: String, schema: SchemaModel): FileSpec {
+  private fun generateAllOfDomainClass(packageName: String, schema: SchemaModel): com.squareup.kotlinpoet.FileSpec {
     val className = typeMapper.toPascalCase(schema.name)
     val refs = schema.allOf ?: emptyList()
 
-    val classBuilder = TypeSpec.classBuilder(className)
-      .addModifiers(KModifier.DATA)
+    val classBuilder = com.squareup.kotlinpoet.TypeSpec.classBuilder(className)
+      .addModifiers(com.squareup.kotlinpoet.KModifier.DATA)
       .addKdoc(buildString {
         appendLine("Generated data class from OpenAPI schema: ${schema.name}")
         if (schema.description != null) {
@@ -342,34 +359,34 @@ class DomainGenerator {
 
     // Add Jackson annotations
     classBuilder.addAnnotation(
-      ClassName("com.fasterxml.jackson.databind.annotation", "JsonSerialize")
+      com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.databind.annotation", "JsonSerialize")
     )
     classBuilder.addAnnotation(
-      ClassName("com.fasterxml.jackson.databind.annotation", "JsonDeserialize")
+      com.squareup.kotlinpoet.ClassName("com.fasterxml.jackson.databind.annotation", "JsonDeserialize")
     )
 
     // For allOf, we'd need to combine properties from all referenced schemas
     // This is a simplified version - in production, you'd merge properties
-    val constructorBuilder = FunSpec.constructorBuilder()
+    val constructorBuilder = com.squareup.kotlinpoet.FunSpec.constructorBuilder()
 
     refs.forEach { ref ->
       val propRefName = typeMapper.toCamelCase(ref)
-      val propRefType = ClassName(packageName, typeMapper.toPascalCase(ref))
+      val propRefType = com.squareup.kotlinpoet.ClassName(packageName, typeMapper.toPascalCase(ref))
 
-      val propertyBuilder = PropertySpec.builder(propRefName, propRefType)
+      val propertyBuilder = com.squareup.kotlinpoet.PropertySpec.builder(propRefName, propRefType)
         .addKdoc("Property from $ref")
         .initializer(propRefName)
         .build()
 
       classBuilder.addProperty(propertyBuilder)
 
-      val parameterBuilder = ParameterSpec.builder(propRefName, propRefType)
+      val parameterBuilder = com.squareup.kotlinpoet.ParameterSpec.builder(propRefName, propRefType)
       constructorBuilder.addParameter(parameterBuilder.build())
     }
 
     classBuilder.primaryConstructor(constructorBuilder.build())
 
-    return FileSpec.builder(packageName, schema.name)
+    return com.squareup.kotlinpoet.FileSpec.builder(packageName, schema.name)
       .addType(classBuilder.build())
       .addImport("com.fasterxml.jackson.databind.annotation", "JsonSerialize")
       .addImport("com.fasterxml.jackson.databind.annotation", "JsonDeserialize")
@@ -383,42 +400,46 @@ class DomainGenerator {
   ): com.squareup.kotlinpoet.TypeName {
     return when {
       typeMapper.isPolymorphic(propInfo.oneOf, propInfo.allOf, propInfo.anyOf) -> {
-        // Use the generated polymorphic type name
-        ClassName(domainPackage, typeMapper.mapPolymorphicType(propInfo.oneOf, propInfo.allOf, propInfo.anyOf) ?: "Any")
+        // Use generated polymorphic type name
+        com.squareup.kotlinpoet.ClassName(
+          domainPackage,
+          typeMapper.mapPolymorphicType(propInfo.oneOf, propInfo.allOf, propInfo.anyOf) ?: "Any"
+        )
       }
+
       propInfo.isArray -> {
         val elementType = if (propInfo.arrayItemRef != null) {
-          ClassName(domainPackage, typeMapper.toPascalCase(propInfo.arrayItemRef))
+          com.squareup.kotlinpoet.ClassName(domainPackage, typeMapper.toPascalCase(propInfo.arrayItemRef))
         } else {
           val mappedType = typeMapper.mapType(propInfo.arrayItemType, propInfo.arrayItemFormat)
           when (mappedType) {
-            "String" -> ClassName("kotlin", "String")
-            "Int" -> ClassName("kotlin", "Int")
-            "Long" -> ClassName("kotlin", "Long")
-            "Float" -> ClassName("kotlin", "Float")
-            "Double" -> ClassName("kotlin", "Double")
-            "Boolean" -> ClassName("kotlin", "Boolean")
-            else -> ClassName("kotlin", "Any")
+            "String" -> com.squareup.kotlinpoet.ClassName("kotlin", "String")
+            "Int" -> com.squareup.kotlinpoet.ClassName("kotlin", "Int")
+            "Long" -> com.squareup.kotlinpoet.ClassName("kotlin", "Long")
+            "Float" -> com.squareup.kotlinpoet.ClassName("kotlin", "Float")
+            "Double" -> com.squareup.kotlinpoet.ClassName("kotlin", "Double")
+            "Boolean" -> com.squareup.kotlinpoet.ClassName("kotlin", "Boolean")
+            else -> com.squareup.kotlinpoet.ClassName("kotlin", "Any")
           }
         }
-        ClassName("kotlin.collections", "List").parameterizedBy(elementType)
+        com.squareup.kotlinpoet.ClassName("kotlin.collections", "List").parameterizedBy(elementType)
       }
 
       propInfo.ref != null -> {
-        ClassName(domainPackage, typeMapper.toPascalCase(propInfo.ref))
+        com.squareup.kotlinpoet.ClassName(domainPackage, typeMapper.toPascalCase(propInfo.ref))
       }
 
       else -> {
         val mappedType = typeMapper.mapType(propInfo.type, propInfo.format)
         when (mappedType) {
-          "String" -> ClassName("kotlin", "String")
-          "Int" -> ClassName("kotlin", "Int")
-          "Long" -> ClassName("kotlin", "Long")
-          "Float" -> ClassName("kotlin", "Float")
-          "Double" -> ClassName("kotlin", "Double")
-          "Boolean" -> ClassName("kotlin", "Boolean")
-          "ByteArray" -> ClassName("kotlin", "ByteArray")
-          else -> ClassName("kotlin", "Any")
+          "String" -> com.squareup.kotlinpoet.ClassName("kotlin", "String")
+          "Int" -> com.squareup.kotlinpoet.ClassName("kotlin", "Int")
+          "Long" -> com.squareup.kotlinpoet.ClassName("kotlin", "Long")
+          "Float" -> com.squareup.kotlinpoet.ClassName("kotlin", "Float")
+          "Double" -> com.squareup.kotlinpoet.ClassName("kotlin", "Double")
+          "Boolean" -> com.squareup.kotlinpoet.ClassName("kotlin", "Boolean")
+          "ByteArray" -> com.squareup.kotlinpoet.ClassName("kotlin", "ByteArray")
+          else -> com.squareup.kotlinpoet.ClassName("kotlin", "Any")
         }
       }
     }
@@ -474,9 +495,4 @@ class DomainGenerator {
       }
     }
   }
-
-  /**
-   * Helper class for building annotations with KotlinPoet.
-   */
-
 }

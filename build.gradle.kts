@@ -24,10 +24,6 @@ dependencies {
     // Quarkus dependencies
     implementation("io.quarkus:quarkus-picocli")
 
-    implementation("io.quarkus:quarkus-rest")
-    implementation("io.quarkus:quarkus-rest-jackson")
-    implementation("io.quarkus:quarkus-rest-client-jackson")
-
     // OpenAPI Parser
     implementation("io.swagger.parser.v3:swagger-parser:2.1.20")
 
@@ -35,8 +31,6 @@ dependencies {
     implementation("com.squareup:kotlinpoet:1.16.0")
 
     // Kotlin
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 

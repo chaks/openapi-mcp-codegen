@@ -4,34 +4,50 @@ import io.github.chaks.openapi2mcp.parser.model.*
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.media.ArraySchema
-import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.oas.models.parameters.Parameter
 import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.responses.ApiResponse
 import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.parser.core.models.ParseOptions
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.inject.Inject
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.exists
 
 /**
- * Parser for OpenAPI 3.0/3.1 YAML specifications.
+ * Interface for parsing OpenAPI specifications.
  *
- * Uses Swagger Parser to parse the YAML file and converts it into
- * the internal ParsedOpenApi model.
+ * Enables DIP compliance and testability by allowing the parser
+ * to be mocked or replaced with alternative implementations (e.g., AsyncAPI, RAML).
  */
-@ApplicationScoped
-class OpenApiParser {
-  private lateinit var currentOpenAPI: OpenAPI
+interface OpenApiParser {
 
   /**
    * Parse an OpenAPI specification file.
    *
    * @param inputFile Path to the OpenAPI YAML file
    * @return ParsedOpenApi representation of the specification
+   * @throws IllegalArgumentException if file doesn't exist or parsing fails
    */
-  fun parse(inputFile: Path): ParsedOpenApi {
+  fun parse(inputFile: Path): ParsedOpenApi
+}
+
+/**
+ * Default implementation using Swagger Parser library.
+ *
+ * Parses OpenAPI 3.0/3.1 YAML specifications and converts them
+ * to the internal ParsedOpenApi model.
+ */
+@ApplicationScoped
+class SwaggerOpenApiParser : OpenApiParser {
+
+  private lateinit var currentOpenAPI: OpenAPI
+
+  @Inject
+  private lateinit var schemaExtractor: SchemaExtractor
+
+  override fun parse(inputFile: Path): ParsedOpenApi {
     require(inputFile.exists()) {
       "Input file does not exist: ${inputFile.absolutePathString()}"
     }
@@ -57,7 +73,7 @@ class OpenApiParser {
       description = info.description
     )
 
-    val schemas = extractSchemas(openAPI).toMutableMap()
+    val schemas = schemaExtractor.extractSchemas(openAPI).toMutableMap()
     val paths = extractPaths(openAPI, schemas)
 
     return ParsedOpenApi(
@@ -65,114 +81,6 @@ class OpenApiParser {
       info = apiInfo,
       schemas = schemas,
       paths = paths
-    )
-  }
-
-  private fun extractSchemas(openAPI: OpenAPI): Map<String, SchemaModel> {
-    val schemas = mutableMapOf<String, SchemaModel>()
-
-    openAPI.components?.schemas?.forEach { (name, schema) ->
-      schemas[name] = extractSchemaModel(name, schema)
-    }
-
-    return schemas
-  }
-
-  private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
-    val properties = schema.properties?.mapValues { (propName, propSchema) ->
-      extractPropertyInfo(propName, propSchema)
-    } ?: emptyMap()
-
-    val required = schema.required?.toSet() ?: emptySet()
-
-    // Extract oneOf, allOf, anyOf references
-    val oneOfRefs = schema.oneOf?.mapNotNull { extractRef(it) }
-    val allOfRefs = schema.allOf?.mapNotNull { extractRef(it) }
-    val anyOfRefs = schema.anyOf?.mapNotNull { extractRef(it) }
-
-    // Extract additionalProperties for map-like objects
-    val additionalProperties = schema.additionalProperties?.let {
-      if (it is Schema<*>) {
-        extractPropertyInfo("additionalProperties", it)
-      } else {
-        // Boolean or other type - use Any
-        PropertyInfo(
-          type = "any",
-          format = null,
-          description = null,
-          isNullable = true,
-          ref = null,
-          isArray = false,
-          arrayItemRef = null,
-          arrayItemType = null,
-          arrayItemFormat = null,
-          enum = null,
-          defaultValue = null,
-          oneOf = null,
-          allOf = null,
-          anyOf = null
-        )
-      }
-    }
-
-    return SchemaModel(
-      name = name,
-      description = schema.description,
-      type = schema.type ?: schema.types?.firstOrNull(),
-      properties = properties,
-      required = required,
-      enum = schema.enum?.map { it.toString() },
-      format = schema.format,
-      ref = schema.`$ref`?.let { extractSimpleRef(it) },
-      oneOf = oneOfRefs,
-      allOf = allOfRefs,
-      anyOf = anyOfRefs,
-      additionalProperties = additionalProperties
-    )
-  }
-
-  private fun extractRef(schema: Schema<*>): String? {
-    return schema.`$ref`?.let { extractSimpleRef(it) }
-      ?: findRefForSchema(schema, currentOpenAPI)
-  }
-
-  private fun extractPropertyInfo(name: String, schema: Schema<*>): PropertyInfo {
-    val isArray = schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true
-    val arrayItemRef = if (isArray) {
-      val itemsSchema = schema.items
-      itemsSchema?.`$ref`?.let { extractSimpleRef(it) } ?: itemsSchema?.let {
-        findRefForSchema(
-          it,
-          currentOpenAPI
-        )
-      }
-    } else {
-      null
-    }
-
-    val arrayItemType = if (isArray) schema.items?.type ?: schema.items?.types?.firstOrNull() else null
-    val arrayItemFormat = if (isArray) schema.items?.format else null
-
-    // Extract oneOf, allOf, anyOf references
-    val oneOfRefs = schema.oneOf?.mapNotNull { extractRef(it) }
-    val allOfRefs = schema.allOf?.mapNotNull { extractRef(it) }
-    val anyOfRefs = schema.anyOf?.mapNotNull { extractRef(it) }
-
-    return PropertyInfo(
-      type = schema.type ?: schema.types?.firstOrNull(),
-      format = schema.format,
-      description = schema.description,
-      isNullable = schema.`default` != null || schema.nullable == true,
-      ref = schema.`$ref`?.let { extractSimpleRef(it) } ?: findRefForSchema(schema, currentOpenAPI),
-      isArray = isArray,
-      arrayItemRef = arrayItemRef,
-      arrayItemType = arrayItemType,
-      arrayItemFormat = arrayItemFormat,
-      enum = schema.enum?.map { it.toString() },
-      defaultValue = schema.`default`?.toString(),
-      oneOf = oneOfRefs,
-      allOf = allOfRefs,
-      anyOf = anyOfRefs
     )
   }
 
@@ -224,7 +132,7 @@ class OpenApiParser {
     val arrayItemRef = if (isArray && schema != null) {
       val itemsSchema = schema.items
       itemsSchema?.`$ref`?.let { extractSimpleRef(it) } ?: itemsSchema?.let {
-        findRefForSchema(
+        schemaExtractor.findRefForSchema(
           it,
           currentOpenAPI
         )
@@ -244,7 +152,12 @@ class OpenApiParser {
       required = parameter.required ?: false,
       type = schema?.type ?: schema?.types?.firstOrNull(),
       format = schema?.format,
-      ref = schema?.`$ref`?.let { extractSimpleRef(it) } ?: schema?.let { findRefForSchema(it, currentOpenAPI) },
+      ref = schema?.`$ref`?.let { extractSimpleRef(it) } ?: schema?.let {
+        schemaExtractor.findRefForSchema(
+          it,
+          currentOpenAPI
+        )
+      },
       isArray = isArray,
       arrayItemRef = arrayItemRef,
       arrayItemType = arrayItemType,
@@ -284,13 +197,13 @@ class OpenApiParser {
       // Check if array items are inline object schemas
       if (itemsSchema != null && !hasItemsRef && itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true) {
         val schemaName = generateInlineSchemaName(method, path, "Item")
-        schemas[schemaName] = extractSchemaModel(schemaName, itemsSchema)
+        schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, itemsSchema)
         inlineSchemaRef = schemaName
       }
 
       ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-          ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: itemsSchema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
     } else {
       val hasRef = schema?.`$ref` != null
 
@@ -302,15 +215,15 @@ class OpenApiParser {
       if (hasOneOf || hasAllOf || hasAnyOf) {
         // Generate a wrapper schema for polymorphic types
         val schemaName = generateInlineSchemaName(method, path, "Request")
-        schemas[schemaName] = extractSchemaModel(schemaName, schema)
+        schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
         inlineSchemaRef = schemaName
 
-        oneOfRefs = schema?.oneOf?.mapNotNull { extractRef(it) }
-        allOfRefs = schema?.allOf?.mapNotNull { extractRef(it) }
-        anyOfRefs = schema?.anyOf?.mapNotNull { extractRef(it) }
+        oneOfRefs = schema?.oneOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        allOfRefs = schema?.allOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        anyOfRefs = schema?.anyOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
       } else if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
         // Check if this is an inline object schema or a resolved component schema reference
-        val matchingComponentSchema = findRefForSchema(schema, currentOpenAPI)
+        val matchingComponentSchema = schemaExtractor.findRefForSchema(schema, currentOpenAPI)
         if (matchingComponentSchema != null) {
           // Use the existing component schema reference instead of creating a duplicate
           // This prevents duplicate domain classes like PetPostRequest/PetPutRequest when both reference the same component schema
@@ -318,14 +231,14 @@ class OpenApiParser {
         } else {
           // This is truly an inline schema - generate a new name
           val schemaName = generateInlineSchemaName(method, path, "Request")
-          schemas[schemaName] = extractSchemaModel(schemaName, schema)
+          schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
           inlineSchemaRef = schemaName
         }
       }
 
       ref = schema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-          ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: schema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
     }
 
     val arrayItemType =
@@ -376,13 +289,13 @@ class OpenApiParser {
       // Check if array items are inline object schemas
       if (itemsSchema != null && !hasItemsRef && (itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true)) {
         val schemaName = generateInlineSchemaName(method, path, "Item")
-        schemas[schemaName] = extractSchemaModel(schemaName, itemsSchema)
+        schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, itemsSchema)
         inlineSchemaRef = schemaName
       }
 
       ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-          ?: itemsSchema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: itemsSchema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
     } else {
       val hasRef = schema?.`$ref` != null
 
@@ -394,15 +307,15 @@ class OpenApiParser {
       if (hasOneOf || hasAllOf || hasAnyOf) {
         // Generate a wrapper schema for polymorphic types
         val schemaName = generateInlineSchemaName(method, path, "Response")
-        schemas[schemaName] = extractSchemaModel(schemaName, schema)
+        schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
         inlineSchemaRef = schemaName
 
-        oneOfRefs = schema?.oneOf?.mapNotNull { extractRef(it) }
-        allOfRefs = schema?.allOf?.mapNotNull { extractRef(it) }
-        anyOfRefs = schema?.anyOf?.mapNotNull { extractRef(it) }
+        oneOfRefs = schema?.oneOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        allOfRefs = schema?.allOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        anyOfRefs = schema?.anyOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
       } else if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
         // Check if this is an inline object schema or a resolved component schema reference
-        val matchingComponentSchema = findRefForSchema(schema, currentOpenAPI)
+        val matchingComponentSchema = schemaExtractor.findRefForSchema(schema, currentOpenAPI)
         if (matchingComponentSchema != null) {
           // Use the existing component schema reference instead of creating a duplicate
           // This prevents duplicate domain classes when multiple responses reference the same component schema
@@ -410,14 +323,14 @@ class OpenApiParser {
         } else {
           // This is truly an inline schema - generate a new name
           val schemaName = generateInlineSchemaName(method, path, "Response")
-          schemas[schemaName] = extractSchemaModel(schemaName, schema)
+          schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
           inlineSchemaRef = schemaName
         }
       }
 
       ref = schema?.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-          ?: schema?.let { findRefForSchema(it, currentOpenAPI) }
+          ?: schema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
     }
 
     val arrayItemType =
@@ -438,16 +351,6 @@ class OpenApiParser {
       allOf = allOfRefs,
       anyOf = anyOfRefs
     )
-  }
-
-  private fun findRefForSchema(schema: Schema<*>, openAPI: OpenAPI): String? {
-    if (schema.`$ref` != null) return extractSimpleRef(schema.`$ref`)
-
-    // If ref is null, maybe it matches one of the component schemas
-    openAPI.components?.schemas?.forEach { (name, componentSchema) ->
-      if (schema == componentSchema) return name
-    }
-    return null
   }
 
   private fun extractSimpleRef(ref: String): String {

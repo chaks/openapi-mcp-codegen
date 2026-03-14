@@ -1,6 +1,8 @@
 package io.github.chaks.openapi2mcp
 
-import io.github.chaks.openapi2mcp.parser.OpenApiParser
+import io.github.chaks.openapi2mcp.parser.SwaggerOpenApiParser
+import io.quarkus.test.junit.QuarkusTest
+import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -18,10 +20,12 @@ import java.nio.file.Paths
  * 5. Polymorphic schemas (oneOf, allOf) are handled correctly
  * 6. Nested schemas are handled correctly
  */
+@QuarkusTest
 @DisplayName("OpenAPI 3.0.3 Code Generation Tests")
 class OpenApi303CodeGenerationTest {
 
-    private val parser = OpenApiParser()
+    @Inject
+    lateinit var parser: SwaggerOpenApiParser
     private val examplePath = Paths.get("examples/openapi-3.0.3.yaml")
 
     // Expected schema names from components/schemas

@@ -13,14 +13,14 @@ import kotlin.io.path.writeText
  * Quarkus and Kotlin dependencies for compiling the generated code.
  */
 @ApplicationScoped
-class BuildConfigGenerator {
+class BuildConfigGenerator : Generator {
 
   /**
    * Generate all Gradle configuration files.
    *
    * @param options CLI options containing output directory and package info
    */
-  fun generate(options: CliOptions) {
+  override fun generate(options: CliOptions) {
     generateBuildGradle(options)
     generateSettingsGradle(options)
     generateGradleWrapper(options)

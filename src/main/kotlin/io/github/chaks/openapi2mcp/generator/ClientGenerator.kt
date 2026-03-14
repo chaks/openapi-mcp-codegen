@@ -1,12 +1,9 @@
 package io.github.chaks.openapi2mcp.generator
 
 import com.squareup.kotlinpoet.*
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import io.github.chaks.openapi2mcp.cli.CliOptions
 import io.github.chaks.openapi2mcp.parser.model.ApiInfo
-import io.github.chaks.openapi2mcp.parser.model.ParameterInfo
 import io.github.chaks.openapi2mcp.parser.model.PathModel
-import io.github.chaks.openapi2mcp.parser.model.RequestBodyInfo
 import io.github.chaks.openapi2mcp.util.TypeMapper
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
@@ -25,6 +22,9 @@ class ClientGenerator {
 
   @Inject
   private lateinit var typeMapper: TypeMapper
+
+  @Inject
+  private lateinit var typeResolver: TypeResolver
 
   /**
    * Generate REST client interface.
@@ -99,7 +99,7 @@ class ClientGenerator {
   }
 
   private fun generateClientMethod(path: PathModel, packageName: String, domainPackage: String): FunSpec {
-    val methodName = deriveMethodName(path)
+    val methodName = typeResolver.deriveMethodName(path)
     val funBuilder = FunSpec.builder(methodName)
       .addModifiers(KModifier.ABSTRACT)
 
@@ -130,7 +130,7 @@ class ClientGenerator {
     path.parameters.forEach { param ->
       val paramName = typeMapper.toSafeIdentifier(param.name)
 
-      val paramType = determineParameterType(param, domainPackage)
+      val paramType = typeResolver.determineParameterType(param, domainPackage)
       val paramBuilder = ParameterSpec.builder(paramName, paramType)
 
       // Add appropriate parameter annotation
@@ -178,7 +178,7 @@ class ClientGenerator {
 
     // Add request body parameter if present
     path.requestBody?.let { requestBody ->
-      val bodyType = determineRequestBodyType(requestBody, packageName, domainPackage)
+      val bodyType = typeResolver.determineRequestBodyType(requestBody, domainPackage)
       val bodyParam = ParameterSpec.builder("body", bodyType)
       if (requestBody.description != null) {
         bodyParam.addKdoc(requestBody.description)
@@ -187,195 +187,13 @@ class ClientGenerator {
     }
 
     // Determine return type
-    val returnType = determineReturnType(path, packageName, domainPackage)
+    val returnType = typeResolver.determineClientReturnType(path, domainPackage)
     funBuilder.returns(returnType)
 
     // Add suspend modifier if needed for async
     // funBuilder.addModifiers(KModifier.SUSPEND)
 
     return funBuilder.build()
-  }
-
-  private fun deriveMethodName(path: PathModel): String {
-    // Try to use operationId if available
-    path.operationId?.let { return typeMapper.toCamelCase(it) }
-
-    // Otherwise derive from path and method
-    val pathPart = path.path
-      .removePrefix("/")
-      .removeSuffix("/")
-      .split("/")
-      .filterNot { it.startsWith("{") && it.endsWith("}") }
-      .joinToString("_")
-
-    val methodPart = path.method.lowercase()
-
-    return if (pathPart.isNotEmpty()) {
-      typeMapper.toCamelCase("${methodPart}_$pathPart")
-    } else {
-      methodPart
-    }
-  }
-
-  private fun determineParameterType(param: ParameterInfo, domainPackage: String): com.squareup.kotlinpoet.TypeName {
-    return when {
-      typeMapper.isPolymorphic(param.oneOf, param.allOf, param.anyOf) -> {
-        // Use the generated polymorphic type name
-        ClassName(domainPackage, typeMapper.toPascalCase(param.ref ?: "Any"))
-      }
-      param.isArray -> {
-        val elementType = if (param.arrayItemRef != null) {
-          ClassName(domainPackage, typeMapper.toPascalCase(param.arrayItemRef))
-        } else {
-          val mappedType = typeMapper.mapType(param.arrayItemType, param.arrayItemFormat)
-          when (mappedType) {
-            "String" -> ClassName("kotlin", "String")
-            "Int" -> ClassName("kotlin", "Int")
-            "Long" -> ClassName("kotlin", "Long")
-            "Float" -> ClassName("kotlin", "Float")
-            "Double" -> ClassName("kotlin", "Double")
-            "Boolean" -> ClassName("kotlin", "Boolean")
-            else -> ClassName("kotlin", "Any")
-          }
-        }
-        ClassName("kotlin.collections", "List").parameterizedBy(elementType)
-      }
-
-      param.ref != null -> {
-        ClassName(domainPackage, typeMapper.toPascalCase(param.ref))
-      }
-
-      else -> {
-        when (typeMapper.mapType(param.type, param.format)) {
-          "String" -> ClassName("kotlin", "String")
-          "Int" -> ClassName("kotlin", "Int")
-          "Long" -> ClassName("kotlin", "Long")
-          "Float" -> ClassName("kotlin", "Float")
-          "Double" -> ClassName("kotlin", "Double")
-          "Boolean" -> ClassName("kotlin", "Boolean")
-          "ByteArray" -> ClassName("kotlin", "ByteArray")
-          else -> ClassName("kotlin", "Any")
-        }
-      }
-    }.copy(nullable = !param.required)
-  }
-
-  private fun determineRequestBodyType(
-    requestBody: RequestBodyInfo,
-    packageName: String,
-    domainPackage: String
-  ): com.squareup.kotlinpoet.TypeName {
-    return when {
-      typeMapper.isPolymorphic(requestBody.oneOf, requestBody.allOf, requestBody.anyOf) -> {
-        // Use the generated polymorphic type name
-        ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref ?: "Any"))
-      }
-      requestBody.isArray -> {
-        val baseType = when {
-          requestBody.ref != null -> ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref))
-          else -> {
-            val mappedType = typeMapper.mapType(requestBody.arrayItemType, requestBody.arrayItemFormat)
-            when (mappedType) {
-              "String" -> ClassName("kotlin", "String")
-              "Int" -> ClassName("kotlin", "Int")
-              "Long" -> ClassName("kotlin", "Long")
-              "Float" -> ClassName("kotlin", "Float")
-              "Double" -> ClassName("kotlin", "Double")
-              "Boolean" -> ClassName("kotlin", "Boolean")
-              else -> ClassName("kotlin", "Any")
-            }
-          }
-        }
-        ClassName("kotlin.collections", "List").parameterizedBy(baseType)
-      }
-
-      requestBody.ref != null -> {
-        ClassName(domainPackage, typeMapper.toPascalCase(requestBody.ref))
-      }
-
-      else -> {
-        val mappedType = typeMapper.mapType(requestBody.type, requestBody.format)
-        when (mappedType) {
-          "String" -> ClassName("kotlin", "String")
-          "Int" -> ClassName("kotlin", "Int")
-          "Long" -> ClassName("kotlin", "Long")
-          "Float" -> ClassName("kotlin", "Float")
-          "Double" -> ClassName("kotlin", "Double")
-          "Boolean" -> ClassName("kotlin", "Boolean")
-          "ByteArray" -> ClassName("kotlin", "ByteArray")
-          else -> ClassName("kotlin", "Any")
-        }
-      }
-    }
-  }
-
-  private fun determineReturnType(
-    path: PathModel,
-    packageName: String,
-    domainPackage: String
-  ): com.squareup.kotlinpoet.TypeName {
-    // Check for 204 No Content response
-    if (path.responses["204"] != null) {
-      return ClassName("kotlin", "Unit")
-    }
-
-    // Find the success response (2xx)
-    val successResponse = path.responses.entries
-      .firstOrNull { it.key.matches(Regex("^2\\d\\d$")) }
-      ?.value
-      ?: path.responses["default"]
-
-    return when {
-      typeMapper.isPolymorphic(successResponse?.oneOf, successResponse?.allOf, successResponse?.anyOf) -> {
-        // Use the generated polymorphic type name
-        ClassName(domainPackage, typeMapper.toPascalCase(successResponse?.ref ?: "Any"))
-      }
-      successResponse?.isNoContent == true -> {
-        ClassName("kotlin", "Unit")
-      }
-
-      successResponse?.isArray == true -> {
-        val baseType = when {
-          successResponse.ref != null -> ClassName(
-            domainPackage,
-            typeMapper.toPascalCase(successResponse.ref)
-          )
-
-          else -> {
-            val mappedType =
-              typeMapper.mapType(successResponse.arrayItemType, successResponse.arrayItemFormat)
-            when (mappedType) {
-              "String" -> ClassName("kotlin", "String")
-              "Int" -> ClassName("kotlin", "Int")
-              "Long" -> ClassName("kotlin", "Long")
-              "Float" -> ClassName("kotlin", "Float")
-              "Double" -> ClassName("kotlin", "Double")
-              "Boolean" -> ClassName("kotlin", "Boolean")
-              else -> ClassName("kotlin", "Any")
-            }
-          }
-        }
-        ClassName("kotlin.collections", "List").parameterizedBy(baseType)
-      }
-
-      successResponse?.ref != null -> {
-        ClassName(domainPackage, typeMapper.toPascalCase(successResponse.ref))
-      }
-
-      else -> {
-        val mappedType = typeMapper.mapType(successResponse?.type, successResponse?.format)
-        when (mappedType) {
-          "String" -> ClassName("kotlin", "String")
-          "Int" -> ClassName("kotlin", "Int")
-          "Long" -> ClassName("kotlin", "Long")
-          "Float" -> ClassName("kotlin", "Float")
-          "Double" -> ClassName("kotlin", "Double")
-          "Boolean" -> ClassName("kotlin", "Boolean")
-          "ByteArray" -> ClassName("kotlin", "ByteArray")
-          else -> ClassName("kotlin", "Any")
-        }
-      }
-    }
   }
 
   private fun buildInterfaceKdoc(info: ApiInfo, pathCount: Int): String {

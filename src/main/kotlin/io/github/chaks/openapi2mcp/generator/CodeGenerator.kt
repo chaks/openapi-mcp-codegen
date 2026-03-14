@@ -1,6 +1,7 @@
 package io.github.chaks.openapi2mcp.generator
 
 import io.github.chaks.openapi2mcp.cli.CliOptions
+import io.github.chaks.openapi2mcp.compiler.Compiler
 import io.github.chaks.openapi2mcp.parser.model.ParsedOpenApi
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
@@ -18,7 +19,7 @@ import kotlin.io.path.writeText
 class CodeGenerator {
 
   @Inject
-  private lateinit var domainGenerator: DomainGenerator
+  private lateinit var domainGenerator: io.github.chaks.openapi2mcp.generator.DomainGenerator
 
   @Inject
   private lateinit var clientGenerator: ClientGenerator
@@ -27,7 +28,10 @@ class CodeGenerator {
   private lateinit var toolGenerator: ToolGenerator
 
   @Inject
-  private lateinit var buildConfigGenerator: BuildConfigGenerator
+  private lateinit var buildConfigGenerator: Generator
+
+  @Inject
+  private lateinit var compiler: Compiler
 
   /**
    * Generate all code artifacts from the parsed OpenAPI specification.
@@ -56,48 +60,16 @@ class CodeGenerator {
   }
 
   /**
-   * Compile the generated code using Gradle.
+   * Compile the generated code using the configured compiler.
    *
    * @param outputDir The output directory containing the generated project
    * @param verbose Whether to show verbose output
    */
   fun compile(outputDir: Path, verbose: Boolean) {
-    val command = if (System.getProperty("os.name").lowercase().contains("windows")) {
-      listOf("cmd", "/c", "gradlew.bat", "build")
-    } else {
-      listOf("./gradlew", "build")
+    if (!compiler.isAvailable()) {
+      throw RuntimeException("Compiler is not available on this system")
     }
-
-    if (verbose) {
-      println("Compiling generated code...")
-      println("  Command: ${command.joinToString(" ")}")
-    }
-
-    val processBuilder = ProcessBuilder(command)
-    processBuilder.directory(outputDir.toFile())
-
-    if (verbose) {
-      processBuilder.redirectErrorStream(true)
-    } else {
-      processBuilder.redirectError(ProcessBuilder.Redirect.PIPE)
-    }
-
-    val process = processBuilder.start()
-
-    // Read output
-    val output = process.inputStream.bufferedReader().readText()
-    val error = process.errorStream.bufferedReader().readText()
-
-    val exitCode = process.waitFor()
-
-    if (verbose) {
-      println(output)
-    }
-
-    if (exitCode != 0) {
-      val errorMessage = error.ifEmpty { output }
-      throw RuntimeException("Compilation failed with exit code $exitCode. Output: $errorMessage")
-    }
+    compiler.compile(outputDir, verbose)
   }
 
   private fun createDirectoryStructure(outputDir: Path) {

@@ -1,15 +1,20 @@
 package io.github.chaks.openapi2mcp
 
-import io.github.chaks.openapi2mcp.parser.OpenApiParser
+import io.github.chaks.openapi2mcp.parser.SwaggerOpenApiParser
+import io.quarkus.test.junit.QuarkusTest
+import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.nio.file.Paths
 
+@QuarkusTest
 class OpenApiPetstoreCodeGenerationTest {
+
+  @Inject
+  lateinit var parser: SwaggerOpenApiParser
 
   @Test
   fun `should parse valid OpenAPI specification`() {
-    val parser = OpenApiParser()
     val examplePath = Paths.get("examples/petstore.yaml")
 
     // Skip test if example file doesn't exist
@@ -31,7 +36,6 @@ class OpenApiPetstoreCodeGenerationTest {
 
   @Test
   fun `should extract schemas correctly`() {
-    val parser = OpenApiParser()
     val examplePath = Paths.get("examples/petstore.yaml")
 
     // Skip test if example file doesn't exist
@@ -52,7 +56,6 @@ class OpenApiPetstoreCodeGenerationTest {
 
   @Test
   fun `should extract paths correctly`() {
-    val parser = OpenApiParser()
     val examplePath = Paths.get("examples/petstore.yaml")
 
     // Skip test if example file doesn't exist
