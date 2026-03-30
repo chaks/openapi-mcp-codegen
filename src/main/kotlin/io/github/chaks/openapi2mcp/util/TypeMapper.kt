@@ -1,15 +1,50 @@
 package io.github.chaks.openapi2mcp.util
 
 import jakarta.enterprise.context.ApplicationScoped
+import org.slf4j.LoggerFactory
 
 /**
  * Utility for mapping OpenAPI types to Kotlin types.
  *
  * Handles type conversions from OpenAPI 3.0/3.1 specification types
  * to appropriate Kotlin types for code generation.
+ *
+ * DEFENSIVE DESIGN:
+ * - Unknown types default to Any
+ * - Invalid identifiers are sanitized
+ * - Null/empty inputs handled gracefully
+ * - Edge cases logged for debugging
  */
 @ApplicationScoped
 class TypeMapper {
+
+  companion object {
+    private val LOG = LoggerFactory.getLogger(TypeMapper::class.java)
+
+    // Reserved Kotlin keywords that must be escaped
+    private val KOTLIN_KEYWORDS = setOf(
+      // Hard keywords
+      "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if",
+      "in", "interface", "is", "null", "object", "package", "return", "super",
+      "this", "throw", "true", "try", "typealias", "typeof", "val", "var", "when",
+      "while",
+
+      // Soft keywords
+      "by", "catch", "constructor", "delegate", "dynamic", "field", "file",
+      "finally", "get", "import", "init", "param", "property", "receiver", "set",
+      "setparam", "where",
+
+      // Modifier keywords
+      "actual", "abstract", "annotation", "companion", "const", "crossinline",
+      "data", "enum", "expect", "external", "final", "infix", "inline", "inner",
+      "internal", "lateinit", "noinline", "open", "operator", "out", "override",
+      "private", "protected", "public", "reified", "sealed", "suspend", "tailrec",
+      "value", "vararg",
+
+      // Other reserved identifiers
+      "it", "yield", "assert", "default"
+    )
+  }
 
   /**
    * Maps an OpenAPI schema reference to a Kotlin class name.
@@ -27,31 +62,60 @@ class TypeMapper {
    * @param type The OpenAPI type (string, number, integer, boolean, array, object)
    * @param format Optional format (e.g., int32, int64, float, double, date-time)
    * @return Kotlin type name
+   *
+   * DEFENSIVE: Handles null/empty types, unknown formats, and edge cases
    */
   fun mapType(type: String?, format: String?): String {
-    val resolvedType = (type ?: inferTypeFromFormat(format))?.lowercase()
-    if (resolvedType == null) return "Any"
+    // DEFENSIVE: Handle null or blank type
+    val resolvedType = if (type.isNullOrBlank()) {
+      // Try to infer from format
+      inferTypeFromFormat(format) ?: run {
+        LOG.debug("Type is null/blank, defaulting to 'Any'")
+        "Any"
+      }
+    } else {
+      type.lowercase().trim()
+    }
+
+    // DEFENSIVE: Validate type is reasonable
+    if (resolvedType.length > 100) {
+      LOG.warn("Unusually long type name '$resolvedType' - truncating and defaulting to Any")
+      return "Any"
+    }
 
     return when (resolvedType) {
       "string" -> mapStringType(format)
       "integer" -> mapIntegerType(format)
       "number" -> mapNumberType(format)
       "boolean" -> "Boolean"
-      "array" -> "List<Any>"
+      "array" -> "List<Any>" // Array without items defined
       "object" -> "Map<String, Any>"
-      else -> "Any"
+      "null" -> "Any?" // OpenAPI 3.1 null type
+      else -> {
+        // DEFENSIVE: Unknown type - log and default to Any
+        LOG.debug("Unknown type '$resolvedType' with format '$format' - defaulting to Any")
+        "Any"
+      }
     }
   }
 
   /**
    * Infers the OpenAPI type from the format if type is missing.
+   *
+   * DEFENSIVE: Handles null and unknown formats gracefully
    */
   private fun inferTypeFromFormat(format: String?): String? {
-    return when (format?.lowercase()) {
+    if (format.isNullOrBlank()) return null
+
+    return when (format.lowercase().trim()) {
       "int32", "int64" -> "integer"
       "float", "double" -> "number"
-      "date", "date-time", "email", "uri", "url", "uuid" -> "string"
-      else -> null
+      "date", "date-time", "email", "uri", "url", "uuid",
+      "byte", "binary", "password", "hostname", "ipv4", "ipv6" -> "string"
+      else -> {
+        LOG.debug("Unknown format '$format' - cannot infer type")
+        null
+      }
     }
   }
 
@@ -120,10 +184,37 @@ class TypeMapper {
    *
    * @param input Input string (e.g., "user_name", "user-name", "userName")
    * @return PascalCase string (e.g., "UserName")
+   *
+   * DEFENSIVE: Handles null, empty, and pathological inputs
    */
-  fun toPascalCase(input: String): String {
-    return input.split(Regex("[-_ .]"))
-      .joinToString("") { it.replaceFirstChar { char -> char.uppercase() } }
+  fun toPascalCase(input: String?): String {
+    // DEFENSIVE: Handle null or empty input
+    if (input.isNullOrBlank()) {
+      LOG.debug("Empty input to toPascalCase - returning 'Any'")
+      return "Any"
+    }
+
+    // DEFENSIVE: Sanitize input - remove invalid characters
+    val sanitized = input.trim()
+      .replace(Regex("[^a-zA-Z0-9._\\-\\s]"), "_") // Replace invalid chars with underscore
+      .replace(Regex("_+"), "_") // Collapse multiple underscores
+
+    if (sanitized.isBlank()) {
+      LOG.debug("Input '$input' sanitized to empty - returning 'Any'")
+      return "Any"
+    }
+
+    // DEFENSIVE: Handle strings that start with numbers
+    val prefix = if (sanitized.firstOrNull()?.isDigit() == true) "_" else ""
+
+    return prefix + sanitized.split(Regex("[-_.\\s]"))
+      .filter { it.isNotEmpty() }
+      .joinToString("") { part ->
+        part.replaceFirstChar { c ->
+          if (c.isLowerCase()) c.uppercaseChar() else c
+        }
+      }
+      .ifBlank { "Any" }
   }
 
   /**
@@ -131,8 +222,16 @@ class TypeMapper {
    *
    * @param input Input string (e.g., "user_name", "user-name", "UserName")
    * @return camelCase string (e.g., "userName")
+   *
+   * DEFENSIVE: Handles null, empty, and pathological inputs
    */
-  fun toCamelCase(input: String): String {
+  fun toCamelCase(input: String?): String {
+    // DEFENSIVE: Handle null or empty input
+    if (input.isNullOrBlank()) {
+      LOG.debug("Empty input to toCamelCase - returning 'any'")
+      return "any"
+    }
+
     val pascal = toPascalCase(input)
     return pascal.replaceFirstChar { it.lowercase() }
   }
@@ -142,27 +241,25 @@ class TypeMapper {
    *
    * @param name Input name (e.g., "class", "package", "user-name")
    * @return Safe Kotlin identifier
+   *
+   * DEFENSIVE: Escapes keywords, handles invalid characters, ensures non-empty result
    */
-  fun toSafeIdentifier(name: String): String {
-    // Escape Kotlin keywords
-    val keywords = setOf(
-      "package", "import", "class", "interface", "object", "enum", "open", "sealed",
-      "abstract", "final", "data", "override", "fun", "val", "var", "get", "set",
-      "it", "this", "super", "when", "if", "else", "try", "catch", "finally",
-      "for", "while", "do", "return", "break", "continue", "throw", "in", "is",
-      "as", "typealias", "this", "super", "companion", "init", "field", "property",
-      "receiver", "param", "setparam", "delegate", "file", "reified", "where",
-      "by", "lateinit", "tailrec", "operator", "infix", "inline", "external",
-      "crossinline", "noinline", "vararg", "suspend", "yield", "actual", "expect",
-      "public", "private", "protected", "internal", "out", "invariant", "inner",
-      "annotation", "catch", "constructor", "dynamic", "enum", "false", "finally",
-      "get", "import", "lateinit", "null", "sealed", "super", "true", "value",
-      "volatile", "transient", "strictfp", "native", "default"
-    )
+  fun toSafeIdentifier(name: String?): String {
+    // DEFENSIVE: Handle null or empty input
+    if (name.isNullOrBlank()) {
+      LOG.debug("Empty name - returning 'value'")
+      return "value"
+    }
 
     val baseName = toCamelCase(name)
 
-    return if (baseName in keywords) {
+    // DEFENSIVE: Ensure we have a valid identifier
+    if (baseName.isBlank() || baseName == "any") {
+      return "value"
+    }
+
+    // DEFENSIVE: Escape Kotlin keywords with backticks
+    return if (baseName in KOTLIN_KEYWORDS) {
       "`$baseName`"
     } else {
       baseName

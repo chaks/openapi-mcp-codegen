@@ -18,6 +18,10 @@ This tool automates the generation of:
 - Includes Gradle wrapper and build configuration in generated output
 - Optional auto-compilation of generated code
 - Selective JAR packaging (domain+client only, excludes tools)
+- **Schema Resilience**: Handles malformed, incomplete, and non-compliant OpenAPI specs with safe defaults
+- **Circular Reference Detection**: Detects and gracefully handles circular schema references
+- **Type Inference**: Automatically infers missing type fields from schema structure
+- **Identifier Sanitization**: Converts any OpenAPI identifier to valid Kotlin identifiers
 
 ## Requirements
 
@@ -81,6 +85,101 @@ java -jar build/quarkus-app/quarkus-run.jar -i examples/petstore.yaml -o ./gener
 ```
 
 Compiles the generated code after generation using the Gradle wrapper that is included in the output directory.
+
+## Schema Resilience & Hardening
+
+The code generator includes robust handling for malformed, incomplete, or non-compliant OpenAPI specifications.
+
+### Safe Defaults Applied
+
+| Issue | Behavior | Default Applied |
+|-------|----------|-----------------|
+| Missing `info` section | Auto-create | `title: "Unnamed API"`, `version: "1.0.0"` |
+| Missing `type` field | Infer from structure | `properties` → `object`, `items` → `array`, `enum` → `string` |
+| Unknown type | Log warning, continue | `Any` |
+| Null schema | Log warning, continue | Empty object schema |
+| Array without `items` | Log warning, continue | `items: Any` |
+| Missing `paths` | Auto-create | Empty paths object |
+| Missing `components` | Auto-create | Empty schemas map |
+| Broken `$ref` | Log error, continue | Graceful handling with safe defaults |
+| Circular references | Detect and warn | Safe placeholder to prevent stack overflow |
+| Empty `types` array | Log warning, default | `object` |
+| Invalid identifier names | Sanitize | Valid Kotlin identifier |
+
+### Circular Reference Detection
+
+The generator detects both direct and indirect circular references:
+
+```yaml
+# Direct: Self-referencing schema
+Node:
+  type: object
+  properties:
+    next:
+      $ref: '#/components/schemas/Node'
+
+# Indirect: A → B → A cycle
+SchemaA:
+  type: object
+  properties:
+    b:
+      $ref: '#/components/schemas/SchemaB'
+SchemaB:
+  type: object
+  properties:
+    a:
+      $ref: '#/components/schemas/SchemaA'
+```
+
+When detected, the generator:
+1. Logs a warning with the full cycle path
+2. Creates a safe placeholder schema instead of crashing
+3. Continues processing remaining schemas
+
+### Type Inference
+
+When `type` is missing, the generator infers from structure:
+
+```yaml
+# No 'type' but has 'properties' → inferred as 'object'
+MySchema:
+  properties:
+    name:
+      type: string
+
+# No 'type' but has 'items' → inferred as 'array'
+MyArray:
+  items:
+    type: string
+
+# No 'type', no structure → defaults to 'object'
+EmptySchema: {}
+```
+
+### Identifier Sanitization
+
+All OpenAPI identifiers are converted to valid Kotlin identifiers:
+
+| Input | Output |
+|-------|--------|
+| `user-name` | `userName` |
+| `User Name` | `UserName` |
+| `123name` | `_123name` |
+| `class` (keyword) | `` `class` `` |
+| `user@name` | `userName` |
+| `__test__` | `__test__` |
+
+### Validation Warnings
+
+The generator logs warnings for non-compliant specs:
+
+```
+[SpecNormalizer] Schema 'MySchema' missing 'type' field - inferred as 'object' from structure
+[SpecNormalizer] Referrer.missing has broken reference '#/components/schemas/NonExistent'
+[SpecNormalizer] Circular reference detected: SchemaA -> SchemaB -> SchemaA
+[SpecNormalizer] Schema 'UnknownType' has unknown type 'invalid_xyz' - defaulting to 'object'
+```
+
 
 ## Generated Structure
 
@@ -240,10 +339,25 @@ class PetstoreTools {
 CLI (Main.kt)
   └─> CliCommand.parse()
       └─> OpenApiParser.parse(inputFile)
+          ├─> SpecNormalizer.normalize() [NEW]
+          │   ├─ Validate structure
+          │   ├─ Apply safe defaults
+          │   ├─ Detect circular refs
+          │   └─ Log warnings/errors
           └─> CodeGenerator.generate(parsedModel)
               ├─> DomainGenerator.generate() → domain classes
               ├─> ClientGenerator.generate() → REST client interfaces
               ├─> ToolGenerator.generate() → MCP tool wrappers
               └─> Generate Gradle build file
 ```
+
+### Defense-in-Depth Layers
+
+| Layer | Component | Responsibility |
+|-------|-----------|----------------|
+| 1 | `SpecNormalizer` | Validate & normalize spec before processing |
+| 2 | `SchemaExtractor` | Safe schema extraction with cycle detection |
+| 3 | `TypeMapper` | Safe type mapping with unknown type fallback |
+| 4 | `TypeResolver` | Defensive type resolution with try/catch |
+
 

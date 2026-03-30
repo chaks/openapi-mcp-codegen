@@ -11,6 +11,7 @@ import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.parser.core.models.ParseOptions
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
+import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.exists
@@ -31,6 +32,16 @@ interface OpenApiParser {
    * @throws IllegalArgumentException if file doesn't exist or parsing fails
    */
   fun parse(inputFile: Path): ParsedOpenApi
+
+  /**
+   * Parse an OpenAPI specification file with normalization.
+   *
+   * @param inputFile Path to the OpenAPI YAML file
+   * @param normalize Whether to apply spec normalization (default: true)
+   * @return ParsedOpenApi representation of the specification
+   * @throws IllegalArgumentException if file doesn't exist or parsing fails critically
+   */
+  fun parse(inputFile: Path, normalize: Boolean): ParsedOpenApi
 }
 
 /**
@@ -38,16 +49,33 @@ interface OpenApiParser {
  *
  * Parses OpenAPI 3.0/3.1 YAML specifications and converts them
  * to the internal ParsedOpenApi model.
+ *
+ * DEFENSIVE DESIGN:
+ * - Integrates SpecNormalizer for hostile input handling
+ * - Applies safe defaults for malformed specs
+ * - Logs warnings for non-compliant patterns
+ * - Continues processing when possible instead of failing
  */
 @ApplicationScoped
 class SwaggerOpenApiParser : OpenApiParser {
+
+  companion object {
+    private val LOG = LoggerFactory.getLogger(SwaggerOpenApiParser::class.java)
+  }
 
   private lateinit var currentOpenAPI: OpenAPI
 
   @Inject
   private lateinit var schemaExtractor: SchemaExtractor
 
+  @Inject
+  private lateinit var specNormalizer: SpecNormalizer
+
   override fun parse(inputFile: Path): ParsedOpenApi {
+    return parse(inputFile, normalize = true)
+  }
+
+  override fun parse(inputFile: Path, normalize: Boolean): ParsedOpenApi {
     require(inputFile.exists()) {
       "Input file does not exist: ${inputFile.absolutePathString()}"
     }
@@ -60,6 +88,18 @@ class SwaggerOpenApiParser : OpenApiParser {
     // Parse the specification
     val result = OpenAPIV3Parser().read(inputFile.absolutePathString(), null, parseOptions)
       ?: throw IllegalArgumentException("Failed to parse OpenAPI specification from $inputFile")
+
+    // DEFENSIVE: Normalize the spec before processing
+    if (normalize) {
+      val normalizationResult = specNormalizer.normalize(result)
+
+      if (!normalizationResult.isValid) {
+        // DEFENSIVE: Log errors but continue with safe defaults
+        LOG.error("Spec has ${normalizationResult.errors.size} critical issues - attempting to continue with safe defaults")
+      } else if (normalizationResult.shouldProceedWithWarnings()) {
+        LOG.info("Spec normalized with ${normalizationResult.warnings.size} warnings - proceeding")
+      }
+    }
 
     return convertToParsedOpenApi(result)
   }
@@ -173,15 +213,46 @@ class SwaggerOpenApiParser : OpenApiParser {
     schemas: MutableMap<String, SchemaModel>
   ): RequestBodyInfo {
     val content = requestBody.content
+
+    // DEFENSIVE: Handle null or empty content with safe default
     val mediaType = content?.get("application/json")
       ?: content?.get("application/x-www-form-urlencoded")
+      ?: content?.get("multipart/form-data")
       ?: content?.values?.firstOrNull()
-      ?: throw IllegalArgumentException("Request body has no supported content type")
+
+    // DEFENSIVE: Instead of throwing, apply safe default
+    if (mediaType == null) {
+      LOG.warn("Request body for $method $path has no supported content type - using safe default")
+      return RequestBodyInfo(
+        description = requestBody.description ?: "Request body",
+        required = requestBody.required ?: false,
+        contentType = "application/json",
+        ref = null,
+        isArray = false,
+        oneOf = null,
+        allOf = null,
+        anyOf = null
+      )
+    }
 
     val schema = mediaType.schema
 
-    val isArray =
-      schema != null && (schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true)
+    // DEFENSIVE: Handle null schema
+    if (schema == null) {
+      LOG.warn("Request body for $method $path has null schema - using Any type")
+      return RequestBodyInfo(
+        description = requestBody.description ?: "Request body",
+        required = requestBody.required ?: false,
+        contentType = "application/json",
+        ref = null,
+        isArray = false,
+        oneOf = null,
+        allOf = null,
+        anyOf = null
+      )
+    }
+
+    val isArray = safeDetectArray(schema)
 
     // Handle inline object schemas and polymorphic schemas
     var ref: String? = null
@@ -190,27 +261,33 @@ class SwaggerOpenApiParser : OpenApiParser {
     var allOfRefs: List<String>? = null
     var anyOfRefs: List<String>? = null
 
-    if (isArray && schema != null) {
+    if (isArray) {
       val itemsSchema = schema.items
       val hasItemsRef = itemsSchema?.`$ref` != null
 
-      // Check if array items are inline object schemas
-      if (itemsSchema != null && !hasItemsRef && itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true) {
-        val schemaName = generateInlineSchemaName(method, path, "Item")
-        schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, itemsSchema)
-        inlineSchemaRef = schemaName
-      }
+      // DEFENSIVE: Handle null items schema
+      if (itemsSchema == null) {
+        LOG.warn("Array request body for $method $path has no items schema - using Any")
+        ref = null
+      } else {
+        // Check if array items are inline object schemas - DEFENSIVE: fix operator precedence
+        if (!hasItemsRef && (itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true)) {
+          val schemaName = generateInlineSchemaName(method, path, "Item")
+          schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, itemsSchema)
+          inlineSchemaRef = schemaName
+        }
 
-      ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
-        ?: inlineSchemaRef
-          ?: itemsSchema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
+        ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
+          ?: inlineSchemaRef
+          ?: itemsSchema.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
+      }
     } else {
-      val hasRef = schema?.`$ref` != null
+      val hasRef = schema.`$ref` != null
 
       // Check for polymorphic schemas (oneOf, allOf, anyOf)
-      val hasOneOf = schema?.oneOf?.isNotEmpty() == true
-      val hasAllOf = schema?.allOf?.isNotEmpty() == true
-      val hasAnyOf = schema?.anyOf?.isNotEmpty() == true
+      val hasOneOf = schema.oneOf?.isNotEmpty() == true
+      val hasAllOf = schema.allOf?.isNotEmpty() == true
+      val hasAnyOf = schema.anyOf?.isNotEmpty() == true
 
       if (hasOneOf || hasAllOf || hasAnyOf) {
         // Generate a wrapper schema for polymorphic types
@@ -218,15 +295,14 @@ class SwaggerOpenApiParser : OpenApiParser {
         schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
         inlineSchemaRef = schemaName
 
-        oneOfRefs = schema?.oneOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
-        allOfRefs = schema?.allOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
-        anyOfRefs = schema?.anyOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
-      } else if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+        oneOfRefs = schema.oneOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        allOfRefs = schema.allOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        anyOfRefs = schema.anyOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+      } else if (!hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
         // Check if this is an inline object schema or a resolved component schema reference
         val matchingComponentSchema = schemaExtractor.findRefForSchema(schema, currentOpenAPI)
         if (matchingComponentSchema != null) {
           // Use the existing component schema reference instead of creating a duplicate
-          // This prevents duplicate domain classes like PetPostRequest/PetPutRequest when both reference the same component schema
           ref = matchingComponentSchema
         } else {
           // This is truly an inline schema - generate a new name
@@ -236,20 +312,19 @@ class SwaggerOpenApiParser : OpenApiParser {
         }
       }
 
-      ref = schema?.`$ref`?.let { extractSimpleRef(it) }
+      ref = schema.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-          ?: schema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
+        ?: schemaExtractor.findRefForSchema(schema, currentOpenAPI)
     }
 
-    val arrayItemType =
-      if (isArray && schema != null) schema.items?.type ?: schema.items?.types?.firstOrNull() else null
-    val arrayItemFormat = if (isArray && schema != null) schema.items?.format else null
+    val arrayItemType = if (isArray) schema.items?.let { safeExtractType(it) } else null
+    val arrayItemFormat = if (isArray) schema.items?.format else null
 
     return RequestBodyInfo(
       description = requestBody.description,
       required = requestBody.required ?: false,
       contentType = "application/json",
-      format = schema?.format,
+      format = schema.format,
       ref = ref,
       isArray = isArray,
       arrayItemType = arrayItemType,
@@ -258,6 +333,24 @@ class SwaggerOpenApiParser : OpenApiParser {
       allOf = allOfRefs,
       anyOf = anyOfRefs
     )
+  }
+
+  /**
+   * DEFENSIVE: Safely detects if a schema is an array type.
+   */
+  private fun safeDetectArray(schema: io.swagger.v3.oas.models.media.Schema<*>): Boolean {
+    return schema is ArraySchema ||
+      schema.type == "array" ||
+      schema.types?.any { it == "array" } == true ||
+      schema.items != null
+  }
+
+  /**
+   * DEFENSIVE: Safely extracts type from schema with null handling.
+   */
+  private fun safeExtractType(schema: io.swagger.v3.oas.models.media.Schema<*>): String? {
+    return schema.type
+      ?: schema.types?.firstOrNull { !it.isNullOrBlank() }
   }
 
   private fun extractResponseInfo(
@@ -272,8 +365,22 @@ class SwaggerOpenApiParser : OpenApiParser {
 
     val schema = mediaType?.schema
 
-    val isArray =
-      schema != null && (schema is ArraySchema || schema.type == "array" || schema.types?.contains("array") == true)
+    // DEFENSIVE: Handle null schema gracefully
+    if (schema == null) {
+      LOG.debug("Response $statusCode for $method $path has no schema - using Any type")
+      return ResponseInfo(
+        statusCode = statusCode,
+        description = response.description ?: "Response $statusCode",
+        ref = null,
+        isArray = false,
+        isNoContent = statusCode == "204",
+        oneOf = null,
+        allOf = null,
+        anyOf = null
+      )
+    }
+
+    val isArray = safeDetectArray(schema)
 
     // Handle inline object schemas and polymorphic schemas
     var ref: String? = null
@@ -282,27 +389,34 @@ class SwaggerOpenApiParser : OpenApiParser {
     var allOfRefs: List<String>? = null
     var anyOfRefs: List<String>? = null
 
-    if (isArray && schema != null) {
+    if (isArray) {
       val itemsSchema = schema.items
-      val hasItemsRef = itemsSchema?.`$ref` != null
 
-      // Check if array items are inline object schemas
-      if (itemsSchema != null && !hasItemsRef && (itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true)) {
-        val schemaName = generateInlineSchemaName(method, path, "Item")
-        schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, itemsSchema)
-        inlineSchemaRef = schemaName
+      // DEFENSIVE: Handle null items
+      if (itemsSchema == null) {
+        LOG.warn("Array response $statusCode for $method $path has no items schema - using Any")
+        ref = null
+      } else {
+        val hasItemsRef = itemsSchema.`$ref` != null
+
+        // Check if array items are inline object schemas
+        if (!hasItemsRef && (itemsSchema.type == "object" || itemsSchema.types?.contains("object") == true)) {
+          val schemaName = generateInlineSchemaName(method, path, "Item")
+          schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, itemsSchema)
+          inlineSchemaRef = schemaName
+        }
+
+        ref = itemsSchema.`$ref`?.let { extractSimpleRef(it) }
+          ?: inlineSchemaRef
+          ?: schemaExtractor.findRefForSchema(itemsSchema, currentOpenAPI)
       }
-
-      ref = itemsSchema?.`$ref`?.let { extractSimpleRef(it) }
-        ?: inlineSchemaRef
-          ?: itemsSchema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
     } else {
-      val hasRef = schema?.`$ref` != null
+      val hasRef = schema.`$ref` != null
 
       // Check for polymorphic schemas (oneOf, allOf, anyOf)
-      val hasOneOf = schema?.oneOf?.isNotEmpty() == true
-      val hasAllOf = schema?.allOf?.isNotEmpty() == true
-      val hasAnyOf = schema?.anyOf?.isNotEmpty() == true
+      val hasOneOf = schema.oneOf?.isNotEmpty() == true
+      val hasAllOf = schema.allOf?.isNotEmpty() == true
+      val hasAnyOf = schema.anyOf?.isNotEmpty() == true
 
       if (hasOneOf || hasAllOf || hasAnyOf) {
         // Generate a wrapper schema for polymorphic types
@@ -310,38 +424,34 @@ class SwaggerOpenApiParser : OpenApiParser {
         schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
         inlineSchemaRef = schemaName
 
-        oneOfRefs = schema?.oneOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
-        allOfRefs = schema?.allOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
-        anyOfRefs = schema?.anyOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
-      } else if (schema != null && !hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
+        oneOfRefs = schema.oneOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        allOfRefs = schema.allOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+        anyOfRefs = schema.anyOf?.mapNotNull { schemaExtractor.extractRef(it, currentOpenAPI) }
+      } else if (!hasRef && (schema.type == "object" || schema.types?.contains("object") == true)) {
         // Check if this is an inline object schema or a resolved component schema reference
         val matchingComponentSchema = schemaExtractor.findRefForSchema(schema, currentOpenAPI)
         if (matchingComponentSchema != null) {
-          // Use the existing component schema reference instead of creating a duplicate
-          // This prevents duplicate domain classes when multiple responses reference the same component schema
           ref = matchingComponentSchema
         } else {
-          // This is truly an inline schema - generate a new name
           val schemaName = generateInlineSchemaName(method, path, "Response")
           schemas[schemaName] = schemaExtractor.extractSchemaModel(schemaName, schema)
           inlineSchemaRef = schemaName
         }
       }
 
-      ref = schema?.`$ref`?.let { extractSimpleRef(it) }
+      ref = schema.`$ref`?.let { extractSimpleRef(it) }
         ?: inlineSchemaRef
-          ?: schema?.let { schemaExtractor.findRefForSchema(it, currentOpenAPI) }
+        ?: schemaExtractor.findRefForSchema(schema, currentOpenAPI)
     }
 
-    val arrayItemType =
-      if (isArray && schema != null) schema.items?.type ?: schema.items?.types?.firstOrNull() else null
-    val arrayItemFormat = if (isArray && schema != null) schema.items?.format else null
+    val arrayItemType = if (isArray) schema.items?.let { safeExtractType(it) } else null
+    val arrayItemFormat = if (isArray) schema.items?.format else null
 
     return ResponseInfo(
       statusCode = statusCode,
-      description = response.description ?: "No description",
-      type = schema?.type ?: schema?.types?.firstOrNull(),
-      format = schema?.format,
+      description = response.description ?: "Response $statusCode",
+      type = schema.type ?: schema.types?.firstOrNull { !it.isNullOrBlank() },
+      format = schema.format,
       ref = ref,
       isArray = isArray,
       arrayItemType = arrayItemType,
