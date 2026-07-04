@@ -62,6 +62,15 @@ Generate code for the Petstore API:
 java -jar build/quarkus-app/quarkus-run.jar --input examples/petstore.yaml --output ./generated --root-package io.swagger.petstore
 ```
 
+Generate code for a hosted OpenAPI spec:
+
+```bash
+curl -fsSL https://xquik.com/openapi.json -o /tmp/xquik-openapi.json
+java -jar build/quarkus-app/quarkus-run.jar --input /tmp/xquik-openapi.json --output ./generated-xquik --root-package com.xquik.api
+```
+
+Xquik publishes an OpenAPI 3.1 spec with API key and OAuth bearer security schemes, which is useful for validating hosted JSON specs and authenticated operation generation.
+
 ### CLI Options
 
 | Option           | Short | Description                                   | Required                  |
@@ -359,5 +368,4 @@ CLI (Main.kt)
 | 2 | `SchemaExtractor` | Safe schema extraction with cycle detection |
 | 3 | `TypeMapper` | Safe type mapping with unknown type fallback |
 | 4 | `TypeResolver` | Defensive type resolution with try/catch |
-
 
