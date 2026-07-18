@@ -28,7 +28,7 @@ import kotlin.system.exitProcess
   name = "openapi-to-mcp",
   mixinStandardHelpOptions = true,
   description = [
-    "Parse an OpenAPI 3.0/3.1 YAML specification and generate a Quarkus-based SDK with MCP Toolset.",
+    "Parse an OpenAPI 3.0/3.1 YAML or JSON specification and generate a Quarkus-based SDK with MCP Toolset.",
     "",
     "Generated packages:",
     "  {root}.domain  - Data classes with Jackson/JSON-B annotations",
@@ -46,7 +46,7 @@ class CliCommand : Runnable {
 
   @Option(
     names = ["-i", "--input"],
-    description = ["Path to the input OpenAPI YAML specification file"],
+    description = ["Path to the input OpenAPI YAML or JSON specification file"],
     required = true
   )
   private lateinit var inputPath: String
