@@ -27,7 +27,7 @@ interface OpenApiParser {
   /**
    * Parse an OpenAPI specification file.
    *
-   * @param inputFile Path to the OpenAPI YAML file
+   * @param inputFile Path to the OpenAPI YAML or JSON file
    * @return ParsedOpenApi representation of the specification
    * @throws IllegalArgumentException if file doesn't exist or parsing fails
    */
@@ -36,7 +36,7 @@ interface OpenApiParser {
   /**
    * Parse an OpenAPI specification file with normalization.
    *
-   * @param inputFile Path to the OpenAPI YAML file
+   * @param inputFile Path to the OpenAPI YAML or JSON file
    * @param normalize Whether to apply spec normalization (default: true)
    * @return ParsedOpenApi representation of the specification
    * @throws IllegalArgumentException if file doesn't exist or parsing fails critically
@@ -47,7 +47,7 @@ interface OpenApiParser {
 /**
  * Default implementation using Swagger Parser library.
  *
- * Parses OpenAPI 3.0/3.1 YAML specifications and converts them
+ * Parses OpenAPI 3.0/3.1 YAML or JSON specifications and converts them
  * to the internal ParsedOpenApi model.
  *
  * DEFENSIVE DESIGN:

@@ -6,7 +6,7 @@ import java.nio.file.Path
 /**
  * Data class representing CLI options for the OpenAPI to MCP generator.
  *
- * @property input The path to the input OpenAPI YAML specification file
+ * @property input The path to the input OpenAPI YAML or JSON specification file
  * @property output The directory where generated code will be written
  * @property rootPackage The root package name for generated code (e.g., com.petstore)
  */

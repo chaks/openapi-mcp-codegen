@@ -1,6 +1,6 @@
 # OpenAPI MCP Codegen
 
-A CLI tool that parses OpenAPI 3.0/3.1 YAML specifications and generates a structured Quarkus-based SDK with MCP (Model Context Protocol) Toolset integration.
+A CLI tool that parses OpenAPI 3.0/3.1 YAML or JSON specifications and generates a structured Quarkus-based SDK with MCP (Model Context Protocol) Toolset integration.
 
 ## Overview
 
@@ -69,13 +69,15 @@ curl -fsSL https://xquik.com/openapi.json -o /tmp/xquik-openapi.json
 java -jar build/quarkus-app/quarkus-run.jar --input /tmp/xquik-openapi.json --output ./generated-xquik --root-package com.xquik.api
 ```
 
-Xquik publishes an OpenAPI 3.1 spec with API key and OAuth bearer security schemes, which is useful for validating hosted JSON specs and authenticated operation generation.
+Xquik publishes an OpenAPI 3.1 JSON spec with API key and OAuth bearer security schemes. This example validates hosted JSON parsing and large API code generation. Configure authentication in the generated client manually.
+
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.
 
 ### CLI Options
 
 | Option           | Short | Description                                   | Required                  |
 |------------------|-------|-----------------------------------------------|---------------------------|
-| `--input`        | `-i`  | Path to the OpenAPI YAML file                 | Yes                       |
+| `--input`        | `-i`  | Path to the OpenAPI YAML or JSON file         | Yes                       |
 | `--output`       | `-o`  | Output directory for generated code           | No (default: ./generated) |
 | `--root-package` | `-r`  | Root package name (e.g., io.swagger.petstore) | Yes                       |
 | `--verbose`      | `-v`  | Enable verbose output                         | No                        |
@@ -368,4 +370,3 @@ CLI (Main.kt)
 | 2 | `SchemaExtractor` | Safe schema extraction with cycle detection |
 | 3 | `TypeMapper` | Safe type mapping with unknown type fallback |
 | 4 | `TypeResolver` | Defensive type resolution with try/catch |
-
